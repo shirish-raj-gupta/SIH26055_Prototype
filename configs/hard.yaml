@@ -1,0 +1,35 @@
+# HARD tier — 30 emitters: mostly scanning + agile, 5 interferers, 2 pop-ups.
+# Carries acceptance test 5 (pop-up latency) and the interferer trap.
+extends: base.yaml
+
+run:
+  name: hard
+  n_seeds: 30
+
+scenario:
+  difficulty: hard
+  n_emitters: 30
+  mix:
+    fixed_cw: 0
+    pulsed_radar: 4
+    circular_scan: 8
+    sector_scan: 3
+    frequency_agile: 4
+    agile_beam: 3
+    comms_burst: 3
+    interferer: 5           # the trap: loud, high-duty, threat_priority ~0.02
+  n_popup: 2                # first transmission only after t > 0.6 * T
+  popup_start_frac: 0.6
+
+reward:
+  w5_interferer_dwell: 2.0  # the trap is denser here, so the penalty is sharper
+
+rl:
+  total_steps: 3000000      # GPU / overnight; ships as a checkpoint
+
+predictor:
+  epochs: 60
+
+eval:
+  agents: [sequential, random, priority_rr, ucb1, thompson,
+           whittle, coprime_sweep, phase_locked, predictor, dqn, ppo, hybrid]

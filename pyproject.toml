@@ -1,0 +1,108 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "smartscan"
+version = "0.1.0"
+description = "Smart Scan Strategy for Electronic Warfare - a closed-loop ES receiver scheduler (SIH 26055)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SmartScan team" }]
+keywords = ["electronic-warfare", "electronic-support", "reinforcement-learning", "radar", "spectrum"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+]
+
+# Core runtime: deliberately small so a judge can `pip install -e .` and run the
+# analytic schedulers, the environment and the full benchmark with no ML stack.
+dependencies = [
+  "numpy>=2.0,<3",
+  "scipy>=1.13,<2",
+  "pyyaml>=6.0,<7",
+  "pydantic>=2.7,<3",
+  "typer>=0.12",
+  "rich>=13.0",
+  "joblib>=1.4",
+]
+
+[project.optional-dependencies]
+# Learned schedulers (predictor, DQN, PPO, hybrid).
+ml = ["torch>=2.3", "gymnasium>=0.29"]
+# Tables, plots, notebooks, dataset builder.
+viz = ["pandas>=2.2", "pyarrow>=16.0", "matplotlib>=3.8", "plotly>=5.20"]
+# Live demo dashboard.
+demo = ["streamlit>=1.35"]
+# Optional Stable-Baselines3 path; the from-scratch RL is the default because the
+# SB3/Gymnasium pin matrix is the likeliest thing to break a live reproduction.
+sb3 = ["stable-baselines3>=2.3", "sb3-contrib>=2.3"]
+# Publishing to and downloading from Kaggle.
+kaggle = ["kaggle>=2.2", "kagglehub>=0.3"]
+# The GATED Turing Synthetic Radar Dataset. We never mirror it; this only
+# provides the client needed to fetch it with the user's own token.
+external = ["datasets>=2.19", "huggingface-hub>=0.23"]
+# ONNX export of the predictor for embedded deployment.
+onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5"]
+all = ["smartscan[ml,viz,demo,kaggle,onnx,dev]"]
+
+[project.scripts]
+smartscan = "smartscan.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["smartscan"]
+
+# Canonical configs live at the repo root so `--config configs/medium.yaml` works
+# from a checkout (acceptance test 2); they are force-included into the wheel so
+# `pip install smartscan` users get them too, resolved by config.py's fallback.
+[tool.hatch.build.targets.wheel.force-include]
+"configs" = "smartscan/configs"
+
+[tool.ruff]
+line-length = 108
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "ARG", "PTH", "RUF", "D"]
+ignore = [
+  "D203",    # incompatible with D211
+  "D213",    # incompatible with D212
+  "E501",    # line length is handled by the formatter
+  "B008",    # typer uses function calls in defaults by design
+  "N803",    # signal-processing names (K, B, T, N) are the domain convention
+  "N806",
+  "RUF001",  # unicode in docstrings is intentional (Greek symbols, arrows)
+  "RUF002",
+  "RUF003",
+  "D107",    # __init__ args are documented on the class, per Google style
+  "D105",    # magic methods
+  "ARG002",  # unused args in ABC implementations are required by the signature
+  "ARG003",
+  "RUF046",  # int() around numpy scalars is deliberate narrowing, not redundant:
+             # np.int64 leaking into a dataclass field breaks dtype hygiene
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ARG"]
+"scripts/*" = ["D"]
+"smartscan/hal/soapy_stub.py" = ["ARG002"]  # stub signatures must match the ABC
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+  "slow: takes more than a few seconds",
+  "acceptance: maps to a numbered acceptance test in docs/architecture.md",
+]
+filterwarnings = ["error::RuntimeWarning"]
+
+[tool.coverage.run]
+source = ["smartscan/env", "smartscan/analysis"]

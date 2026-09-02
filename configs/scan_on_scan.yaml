@@ -1,0 +1,52 @@
+# SCAN-ON-SCAN ESTIMATOR VALIDATION — acceptance test 4.
+#
+# ***NEEDS APPROVAL (architecture.md §17-A).***
+# Acceptance test 4 asks for a 4.0 s scan period recovered to within 2%. The default
+# 10 s episode contains only 2.5 revolutions, i.e. two or three beam arrivals — not
+# enough to support a 2% estimate under jitter and missed looks, by any estimator.
+#
+# This config extends the horizon to 120 s = 30 revolutions purely for ESTIMATOR
+# validation. Scheduler benchmarking stays on the 10 s tiers, unchanged.
+# Cost: 120k slots x 64 channels ~ 55 MB of tensors, ~2 s to generate (precomputed and
+# vectorised, architecture.md §15). Nothing else about the pipeline changes.
+extends: base.yaml
+
+run:
+  name: scan_on_scan
+  n_seeds: 30
+
+time:
+  episode_s: 120.0            # 30 revolutions of a 4.0 s scanner
+
+scenario:
+  difficulty: medium
+  n_emitters: 6
+  mix:
+    fixed_cw: 1
+    pulsed_radar: 1
+    circular_scan: 3          # the estimation targets
+    sector_scan: 1
+    frequency_agile: 0
+    agile_beam: 0
+    comms_burst: 0
+    interferer: 0
+  n_popup: 0
+
+emitters:
+  circular_scan:
+    scan_period_s: 4.0        # FIXED, not a range — this is the known-truth test case
+    beamwidth_deg: [2.0, 4.0]
+    scan_phase_frac: [0.0, 1.0]
+
+analysis:
+  estimators:
+    method: both              # report Lomb-Scargle AND CDIF/SDIF head-to-head
+    period_grid_s: [1.0, 12.0]
+    n_period_bins: 8000
+    deconvolve_window: true
+
+eval:
+  agents: [sequential, coprime_sweep, phase_locked, whittle]
+  # Estimator quality is reported by `smartscan estimate`, not the scheduler
+  # benchmark; these are the scheduler metrics that still make sense here.
+  metrics: [ttfi_hard_median_s, twir_rate, coverage]

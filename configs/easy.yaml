@@ -1,0 +1,27 @@
+# EASY tier — 5 static emitters. The live-demo config: must run end-to-end in <10 min CPU.
+# NOTE: SequentialSweep is near-optimal against static emitters (architecture.md §17-C).
+#       We do not expect a large win here, and we say so rather than manufacturing one.
+extends: base.yaml
+
+run:
+  name: easy
+
+scenario:
+  difficulty: easy
+  n_emitters: 5
+  mix:
+    fixed_cw: 3
+    pulsed_radar: 2
+    circular_scan: 0
+    sector_scan: 0
+    frequency_agile: 0
+    agile_beam: 0
+    comms_burst: 0
+    interferer: 0
+  n_popup: 0
+
+rl:
+  total_steps: 200000
+
+predictor:
+  epochs: 20

@@ -1,0 +1,359 @@
+# =============================================================================
+# SmartScan — BASE CONFIGURATION (every default lives here, annotated)
+#
+# Layering:  base.yaml  <-  <tier>.yaml overlay  <-  CLI --set a.b.c=v
+# Validation: parsed into Pydantic v2 models (smartscan/config.py).
+#             extra="forbid" -> an unknown key is a HARD ERROR, never a silent no-op.
+# Derived values (n_slots, channel widths, noise floor) are COMPUTED, never configured.
+#
+# YAML float convention: always write a dot AND a signed exponent (1.0e-3, 0.5e+9).
+#   PyYAML 1.1 parses bare `1e-4` and `0.5e9` as STRINGS. This bites everyone once.
+# Units are in the field name: _hz _s _db _dbm _km _deg _slots _frac
+# A two-element list [lo, hi] is a UNIFORM sampling range unless `dist:` says otherwise.
+# =============================================================================
+schema_version: 1
+
+# -----------------------------------------------------------------------------
+run:
+  name: base                  # str    | output goes to {out_dir}/{name}/
+  seed: 20260902              # int    | ROOT seed; substreams derived by SeedSequence tree
+  n_seeds: 30                 # int>0  | benchmark seeds; seeds are seed..seed+n_seeds-1
+  out_dir: runs               # path   |
+  device: cpu                 # cpu | cuda
+  deterministic: true         # bool   | torch.use_deterministic_algorithms + fixed threads
+  torch_threads: 4            # int>0  | PINNED, not auto. CPU reduction order varies with
+                              #   THREAD COUNT, so runs stay bit-identical as long as this is
+                              #   fixed -- it does not have to be 1. Pinning to 4 rather than
+                              #   letting torch pick core-count keeps results identical across
+                              #   machines while recovering ~3x on RL training.
+  log_level: INFO             # DEBUG | INFO | WARNING | ERROR
+
+# -----------------------------------------------------------------------------
+spectrum:
+  f_start_hz: 0.5e+9          # float>0 | lower band edge
+  f_stop_hz: 18.0e+9          # float   | upper band edge; must be > f_start_hz
+  n_channels: 128             # int>0   | B. Default width = 136.7 MHz.
+                              #   Sized so the problem sits in the REGIME THAT MATTERS.
+                              #   A sweep costs N_win*(dwell+t_settle) = 32*3 = 96 slots.
+                              #   A scanning radar illuminates us for roughly
+                              #   2.4 * (beamwidth/360) * Ts  (the 2.4 comes from the SNR
+                              #   margin either side of the 3 dB beamwidth), i.e. 7-200 ms.
+                              #   At B=64 the sweep took 48 ms and was SHORTER than every
+                              #   illumination window, so it could not miss and scan-on-scan
+                              #   was not a problem at all -- measured, and the reason B was
+                              #   raised. K/B = 1/32 still satisfies the PS requirement that
+                              #   IBW be at least an order of magnitude below the band.
+  partition: uniform          # uniform | log | explicit
+  edges_hz: null              # list[float] len B+1, strictly increasing.
+                              #   REQUIRED iff partition == explicit, else must be null.
+
+# -----------------------------------------------------------------------------
+time:
+  dt_s: 1.0e-3                # float>0 | slot = receiver dwell time
+  episode_s: 10.0             # float>0 | derived n_slots = round(episode_s / dt_s) = 10000
+
+# -----------------------------------------------------------------------------
+receiver:
+  ibw_channels: 4             # int>0   | K, must satisfy K <= n_channels
+  action_space: center_index  # center_index | window_start   (both give B-K+1 legal actions)
+  mask_illegal_actions: true  # bool    | windows off the band edge are masked, not clipped
+  t_settle_slots: 2           # int>=0  | slots lost on EVERY retune. The core cost term.
+  straddle_enabled: true      # bool
+  straddle_loss_db: 1.5       # float>=0 | channeliser scalloping near channel edges
+  noise_figure_db: 4.0        # float>=0
+  sensitivity_dbm: -110.0     # float   | tangential sensitivity IN THE DETECTION BANDWIDTH;
+                              #   below this the front end cannot register the signal at all.
+                              #   Calibrated against the default link budget: a 55 dBm EIRP
+                              #   emitter at 100 km / 9 GHz arrives at about -97 dBm.
+  antenna_gain_dbi: 3.0       # float   | receiver antenna, assumed omnidirectional
+  backend: simulated          # simulated | soapy   ('soapy' raises NotImplementedError)
+
+  detector:
+    type: square_law          # square_law   (only implemented model)
+    pfa: 1.0e-4               # 0<Pfa<1 | per observed channel per dwell
+    swerling: 1               # 0 (non-fluctuating, exact ncx2) | 1 (Rayleigh, closed form)
+    n_integrate: auto         # auto -> derived from dwell/dt; or an explicit int >= 1
+    fft_size: 256             # int>0   | channeliser FFT length. A narrowband signal lands in
+                              #   ONE bin, so energy-mode detection gets 10*log10(fft_size) dB
+                              #   of processing gain against a bin-width noise floor.
+    n_integrate_max: 256      # int>0   | cap on averaged periodograms per dwell. Set by back-end
+                              #   throughput, not by physics; keeps N out of the regime where the
+                              #   exact Swerling forms are ill-conditioned.
+    snr_est_sigma_db: 2.0     # float>=0 | noise on the REPORTED SNR (agents get a noisy read)
+    report_snr_on_miss: false # bool    | false = NaN when no hit declared
+
+# -----------------------------------------------------------------------------
+# Per-class parameter PRIORS. The scenario generator samples from these.
+# Nothing here is emitter-instance state; instances are drawn per seed.
+# -----------------------------------------------------------------------------
+emitters:
+  defaults:                   # applied to every class unless overridden below
+    eirp_dbm: [40.0, 70.0]
+    range_km: [20.0, 300.0]
+    threat_priority: [0.3, 0.9]
+    misc_loss_db: 2.0
+
+  fixed_cw:
+    detection_mode: energy
+    snr_db: [4.0, 22.0]
+    threat_priority: [0.2, 0.5]
+
+  pulsed_radar:
+    detection_mode: pulse
+    pri_s: [1.0e-4, 5.0e-3]       # 100 us .. 5 ms
+    pulse_width_s: [1.0e-7, 5.0e-6]
+    pri_mode: constant            # constant | jittered | stagger
+    pri_jitter_frac: 0.05         # used iff pri_mode == jittered
+    stagger_ratios: [1.0, 1.12, 0.93, 1.07]   # used iff pri_mode == stagger
+    snr_db: [6.0, 26.0]
+    threat_priority: [0.5, 0.9]
+
+  circular_scan:
+    detection_mode: pulse
+    scan_period_s: [1.0, 12.0]    # Ts   (PS-specified range)
+    beamwidth_deg: [1.0, 6.0]     # theta_bw (PS-specified range)
+    sidelobe_db: [-45.0, -30.0]   # relative to main lobe. Paired with snr_db below this
+                                  #   places sidelobe intercepts at a few per episode --
+                                  #   genuinely "possible but weak", as the brief asks.
+                                  #   Shallower sidelobes (-20 dB) make the scanner
+                                  #   permanently visible and destroy the scan-on-scan
+                                  #   problem entirely; that was measured, not assumed.
+    backlobe_db: -55.0
+    scan_phase_frac: [0.0, 1.0]   # initial phase, so seeds are not synchronised
+    pri_s: [5.0e-4, 2.0e-3]
+    pulse_width_s: [5.0e-7, 3.0e-6]
+    snr_db: [10.0, 26.0]          # MAIN-LOBE SNR
+    threat_priority: [0.6, 1.0]
+
+  sector_scan:
+    detection_mode: pulse
+    sector_deg: [60.0, 150.0]
+    scan_rate_deg_s: [30.0, 120.0]
+    beamwidth_deg: [1.5, 5.0]
+    turnaround_dwell_s: [0.05, 0.30]  # dead time at each sector end
+    bidirectional: true
+    sidelobe_db: [-45.0, -30.0]
+    snr_db: [10.0, 26.0]
+    threat_priority: [0.6, 1.0]
+
+  frequency_agile:
+    detection_mode: pulse
+    hop_rate_hz: [100.0, 10000.0]     # PS-specified; >1000 Hz means SUB-SLOT hops
+    hop_set_size: [4, 32]             # int range
+    hop_set_contiguous_frac: 0.5      # P(hop set is a contiguous block vs scattered)
+    hop_pattern: prng                 # prng | cyclic
+    snr_db: [8.0, 26.0]
+    threat_priority: [0.5, 0.95]
+
+  agile_beam:
+    detection_mode: pulse
+    revisit_mean_s: [0.5, 6.0]        # AESA look scheduling: NO fixed period
+    revisit_shape_k: 1.4              # Gamma shape; k<2 => heavy tail => hard to predict
+    look_duration_s: [2.0e-3, 3.0e-2]
+    beamwidth_deg: [1.0, 3.0]
+    snr_db: [10.0, 26.0]
+    threat_priority: [0.7, 1.0]
+
+  comms_burst:
+    detection_mode: energy
+    p_on_to_off: 0.004                # 2-state Markov chain, per slot
+    p_off_to_on: 0.0008
+    dwell_dist: lognormal             # lognormal | pareto  (long-tailed, as specified)
+    dwell_sigma: 1.1
+    snr_db: [6.0, 24.0]
+    threat_priority: [0.3, 0.6]
+
+  interferer:                          # the trap: high duty, near-zero value
+    detection_mode: energy
+    duty_frac: [0.7, 1.0]
+    threat_priority: [0.01, 0.05]
+    eirp_dbm: [60.0, 80.0]            # deliberately LOUD -> maximally tempting
+    snr_db: [28.0, 45.0]              # always well above threshold: the easy, worthless target
+    range_km: [5.0, 40.0]
+
+# -----------------------------------------------------------------------------
+scenario:
+  difficulty: easy            # easy | medium | hard   (overlays set the mix)
+  n_emitters: 5
+  mix:                        # counts per class; sum MUST equal n_emitters
+    fixed_cw: 3
+    pulsed_radar: 2
+    circular_scan: 0
+    sector_scan: 0
+    frequency_agile: 0
+    agile_beam: 0
+    comms_burst: 0
+    interferer: 0
+  n_popup: 0                  # int>=0 | emitters whose first transmission is late
+  popup_start_frac: 0.6       # float in (0,1) | pop-ups first active at t > frac * T
+  placement: poisson_disk     # poisson_disk | uniform
+  min_channel_separation: 2   # int>=0 | for poisson_disk; prevents lucky-window scenarios
+  allow_channel_collision: true
+
+# -----------------------------------------------------------------------------
+belief:
+  alpha_prior: 1.0            # float>0 | Beta(1,1) = uniform, an honest "I don't know"
+  beta_prior: 1.0
+  decay_half_life_slots: 2000 # int>0   | 2 s at dt=1ms. Stale info decays TOWARD the prior.
+  ewma_activity_alpha: 0.02
+  ewma_snr_alpha: 0.10
+  n_features: 12              # F, per channel (see architecture.md §10.1). Fixed by code.
+  n_global_features: 5        # G
+  period_estimator: lomb_scargle   # lomb_scargle | sdif | none
+  period_min_confidence: 0.6  # below this, phase features are zeroed
+
+# -----------------------------------------------------------------------------
+reward:
+  w1_threat_intercept: 10.0   # per NEW emitter intercepted, scaled by threat_priority
+  w2_novelty: 5.0             # first-ever detection of an emitter ID
+  w3_reconfirm: 0.5           # re-confirming a tracked emitter
+  w4_retune: 0.01             # SHAPING ONLY. The real cost of a retune is already paid in
+                              #   t_settle slots of blindness; charging it again in the
+                              #   reward double-counts and, at 0.2, swamped the +180 of
+                              #   novelty reward with -667 of retune penalty for a sweep.
+  w5_interferer_dwell: 1.0    # penalty per slot dwelt on a believed interferer
+  w6_staleness: 20.0          # penalty on MAX_b(time_since_visit)/T  (max, not mean).
+                              #   Large because normalise_by_episode divides it by n_slots,
+                              #   so it integrates to ~w6 * mean(max_stale/T) over an episode.
+  reconfirm_cap_per_emitter: 20   # anti-reward-hacking: diminishing returns on w3
+  normalise_by_episode: true
+
+# -----------------------------------------------------------------------------
+agents:
+  coverage_weight: 1.0        # staleness term shared by every value-based policy.
+                              #   Without it the bandits and Whittle park on their best
+                              #   window and band coverage collapses.
+  sequential_sweep:
+    step_channels: 4          # int>0 | 4 = non-overlapping windows = fastest full revisit
+    direction: up             # up | updown (saw-tooth vs triangle)
+    dwell_slots: 3            # int>0 | slots per window before stepping. TUNED, not chosen:
+                              #   at t_settle=2 a 1-slot dwell burns 2/3 of the episode
+                              #   settling, and total observation per channel is
+                              #   T*d/(N_win*(d+2)) -> 208 slots at d=1 but 375 at d=3.
+                              #   Sweeping d over {1,2,3,5,8,12,20} on MEDIUM put the best
+                              #   TTFI at d=3 (see eval/ablation.py). Leaving it at the
+                              #   textbook d=1 would make the incumbent a strawman and the
+                              #   headline comparison worthless. d=1 remains an ablation.
+  random_scan:
+    seed_offset: 0
+    dwell_slots: 1
+  priority_round_robin:
+    prior_wrong_frac: 0.4     # PS-specified: pre-mission data is WRONG 40% of the time
+    weight_floor: 0.05        # keeps a starved channel from never being revisited
+  epsilon_greedy:
+    epsilon: 0.10
+    epsilon_decay: 0.9995
+    epsilon_min: 0.01
+  ucb1:
+    c: 1.4142135623730951     # sqrt(2), the standard UCB1 constant
+    discounted: true          # discounted UCB (Garivier & Moulines) — the restless variant
+    gamma: 0.9995
+  thompson:
+    posterior: beta           # samples the DECAYED Beta posterior from belief
+  whittle:
+    discount: 0.99            # beta for the single-arm value iteration
+    subsidy_lo: 0.0
+    subsidy_hi: 1.0
+    bisect_tol: 1.0e-6
+    bisect_max_iter: 60
+    use_closed_form: true     # Liu & Zhao closed form when p11 >= p01 (positively correlated)
+    check_indexability: true  # assert monotone passive set; report violations per channel
+    min_transitions_for_estimate: 8   # fall back to the prior below this
+  coprime_sweep:
+    base_period_s: 0.048      # 16 tunes x 3 slots at K=4, t_settle=2
+    dwell_slots: 1
+    irrationality: golden     # golden | silver | explicit  (badly-approximable Tr/Te)
+    avoid_detected_periods: true
+  phase_locked:
+    guard_sigma: 3.0          # park from t_hat - (guard_sigma*sigma_est + t_settle)
+    min_confidence: 0.7
+    fallback: whittle         # policy used between predicted arrivals
+
+# -----------------------------------------------------------------------------
+predictor:
+  arch: gru                   # gru | tcn | transformer
+  window_slots: 128           # W
+  input_planes: 4             # visit mask, hit mask, SNR estimate, staleness
+  hidden_dim: 128
+  n_layers: 2
+  tcn_dilations: [1, 2, 4, 8, 16, 32, 64]
+  transformer_heads: 4
+  dropout: 0.1
+  loss: masked_focal          # masked_focal | masked_bce
+  focal_gamma: 2.0            # occupancy is ~2-5% positive; plain BCE collapses to "idle"
+  focal_alpha: 0.25
+  lr: 3.0e-4
+  batch_size: 64
+  epochs: 20
+  distillation:
+    enabled: true
+    lambda_kd: 0.5            # TRAINING-TIME ONLY. Teacher sees ground truth; student never does.
+    temperature: 2.0
+    teacher_epochs: 10
+
+# -----------------------------------------------------------------------------
+rl:
+  algo: ppo                   # ppo | dqn
+  implementation: from_scratch  # from_scratch | sb3   (sb3 is an optional extra)
+  encoder: conv1d             # conv1d (weight-shared across channels) | mlp
+  hidden_dim: 256
+  gamma: 0.99
+  total_steps: 200000
+  n_envs: 8
+  ppo:
+    lr: 3.0e-4
+    clip_range: 0.2
+    gae_lambda: 0.95
+    n_epochs: 4               # 4 rather than the textbook 10: the extra epochs cost 2.5x
+                              #   wall-clock and did not move the return on this task.
+    rollout_steps: 256
+    entropy_coef: 0.01
+    value_coef: 0.5
+    max_grad_norm: 0.5
+  dqn:
+    lr: 1.0e-4
+    buffer_size: 100000
+    learning_starts: 5000
+    target_update_interval: 1000
+    train_freq: 4
+    double: true
+    duelling: true
+    prioritised: true
+    exploration_final_eps: 0.02
+  hybrid:
+    predictor_checkpoint: null   # path; null -> train one first
+    freeze_predictor: true       # no gradient flows back into the predictor
+
+# -----------------------------------------------------------------------------
+analysis:
+  scan_on_scan:
+    poi_model: deterministic     # deterministic (staircase) | exponential (the common, wrong one)
+    max_horizon_s: 120.0
+  estimators:
+    method: both                 # lomb_scargle | sdif | both
+    period_grid_s: [0.5, 15.0]
+    n_period_bins: 4000
+    deconvolve_window: true      # CRITICAL: divide out OUR OWN visit schedule's spectrum,
+                                 # else the periodogram confidently reports our sweep period.
+    ls_peak_snr_threshold: 6.0
+    sdif_threshold_k: 3.0        # CDIF/SDIF detection threshold, in Poisson sigmas above
+                                 #   the uniform-arrival expectation. The classical
+                                 #   c*(N-k)*exp(...) form is calibrated for PRI
+                                 #   deinterleaving with thousands of pulses; at ~30 scan
+                                 #   arrivals it never fires at all.
+    sdif_subharmonic_check: true
+
+# -----------------------------------------------------------------------------
+eval:
+  agents: [sequential, random, priority_rr, ucb1, thompson, whittle, ppo]
+  n_bootstrap: 10000
+  ci: 0.95
+  paired: true                 # pair agents on identical scenarios; removes scenario variance
+  metrics: [ttfi_hard_median_s, ttfi_median_s, twir_rate, twir_coverage, coverage,
+            staleness_max_s, waste_fraction, popup_detect_rate, discovery_auc, fa_burden]
+                              # Names MUST match keys emitted by evaluate_episode; a
+                              # mismatch used to be silently skipped, so it is now a
+                              # load-time error (validator 16).
+  baseline_agent: sequential   # everything is reported as a paired delta vs this
+  save_plots: true
+  save_trajectories: false     # large; enable only for the dashboard

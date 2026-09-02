@@ -1,0 +1,69 @@
+# --------------------------------------------------------------------------- #
+# CREDENTIALS -- these must never enter the repository.
+# If one ever does, rotate it first and scrub history second: a secret that has
+# been committed is compromised even after the commit is removed.
+# --------------------------------------------------------------------------- #
+kaggle.json
+.kaggle/
+**/kaggle.json
+access_token
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+secrets.yaml
+secrets.yml
+.hf_token
+huggingface_token*
+
+# --------------------------------------------------------------------------- #
+# Generated artefacts
+# --------------------------------------------------------------------------- #
+runs/
+reports/
+build/
+dist/
+*.egg-info/
+wandb/
+lightning_logs/
+
+# Model weights and datasets are large and reproducible from seeds; they are
+# distributed as Kaggle artefacts rather than in git.
+*.pt
+*.pth
+*.onnx
+*.npz
+*.parquet
+!tests/**/*.npz
+
+# --------------------------------------------------------------------------- #
+# Python
+# --------------------------------------------------------------------------- #
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+
+# --------------------------------------------------------------------------- #
+# Notebooks and editors
+# --------------------------------------------------------------------------- #
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Scratch work
+scripts/_*.py
+/tmp/
+
+# Build logs
+*.log
