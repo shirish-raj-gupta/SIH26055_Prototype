@@ -187,6 +187,9 @@ def train(
     what: str = typer.Option("ppo", "--what", "-w", help="ppo | dqn | predictor | hybrid"),
     steps: int | None = typer.Option(None, help="Override total steps / epochs."),
     arch: str | None = typer.Option(None, help="Predictor architecture override."),
+    episodes: int = typer.Option(
+        16, "--episodes", help="Training episodes (predictor); more is usually better."
+    ),
     set_: list[str] = _SET,
 ) -> None:
     """Train a learned scheduler and save its checkpoint."""
@@ -197,7 +200,11 @@ def train(
     t0 = time.perf_counter()
 
     # Training seeds are disjoint from evaluation seeds by construction.
-    train_seeds = list(range(cfg.run.seed + 1000, cfg.run.seed + 1000 + 16))
+    # Disjoint from evaluation seeds by construction. The count is a knob
+    # because 16 is not enough for the predictor: on 16 episodes the privileged
+    # teacher reaches AP 0.41 while the observation-only student collapses to
+    # predicting no positives at all.
+    train_seeds = list(range(cfg.run.seed + 1000, cfg.run.seed + 1000 + max(episodes, 1)))
 
     if what in {"ppo", "dqn", "hybrid"}:
         from smartscan.agents.rl_agents import train_dqn, train_ppo
