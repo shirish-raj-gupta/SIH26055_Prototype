@@ -24,9 +24,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "FIGURE_DPI",
+    "plot_ablation_tornado",
     "plot_detection_curves",
     "plot_intercept_heatmap",
     "plot_learning_curves",
+    "plot_scan_on_scan",
     "plot_survival",
     "plot_waterfall",
     "save_all",
@@ -333,3 +335,185 @@ def save_all(
     if logs:
         written.append(plot_learning_curves(logs, out / "f4_learning.png"))
     return written
+
+
+def plot_scan_on_scan(
+    config: Config,
+    path: str | Path = "reports/f6_scan_on_scan.png",
+    te_s: float = 4.0,
+    beamwidth_deg: float = 2.0,
+) -> Path:
+    """**F6.** Coincidence diagram, plus estimated against true scan period.
+
+    Three panels, because the argument needs all three:
+
+    1. **Blindness.** Probability of intercept against time for several receiver
+       sweep periods. A commensurate ratio flatlines near zero forever while the
+       classical closed form still reports a finite mean time to intercept.
+    2. **Phase coverage.** Where each sweep ratio actually samples the emitter's
+       scan phase, which is *why* the commensurate case fails.
+    3. **Estimator accuracy.** Recovered period against truth, from the
+       validation report if one has been written.
+
+    Args:
+        config: Resolved configuration, for the receiver dwell.
+        path: Output path.
+        te_s: Emitter scan period to analyse.
+        beamwidth_deg: Emitter 3 dB beamwidth.
+
+    Returns:
+        The path written.
+    """
+    import json
+
+    from smartscan.analysis.scan_on_scan import (
+        GOLDEN,
+        analyse_coincidence,
+        beam_dwell_s,
+        poi_exponential,
+        probability_of_intercept,
+    )
+
+    plt = _plt()
+    we = beam_dwell_s(beamwidth_deg, te_s)
+    wr = config.time.dt_s
+    cases = [(0.096, "0.096 s (sweep)"), (0.096 * GOLDEN, "golden-scaled"),
+             (1.0, "1.0 s = Te/4"), (2.0, "2.0 s = Te/2")]
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.4))
+
+    t = np.linspace(0.1, 120.0, 500)
+    for tr, label in cases:
+        r = analyse_coincidence(tr, te_s, wr, we, horizon_s=120.0)
+        axes[0].plot(
+            t, probability_of_intercept(tr, te_s, wr, we, t),
+            lw=1.6, label=f"{label} — {100 * r.blind_fraction:.0f}% blind",
+        )
+    axes[0].plot(t, poi_exponential(0.096, te_s, wr, we, t), "k--", lw=1.0,
+                 label=r"$1-e^{-t/\tau}$ (assumed)")
+    axes[0].set_xlabel("time (s)")
+    axes[0].set_ylabel("probability of intercept")
+    axes[0].set_title(rf"POI: {te_s} s / {beamwidth_deg}$^\circ$ scanner")
+    axes[0].set_ylim(-0.02, 1.02)
+    axes[0].grid(alpha=0.3)
+    axes[0].legend(fontsize=7.5)
+
+    for i, (tr, _label) in enumerate(cases):
+        phases = np.mod(np.arange(1, 200) * tr, te_s) / te_s
+        axes[1].scatter(phases, np.full_like(phases, i), s=7, alpha=0.75)
+    win = (wr + we) / te_s
+    axes[1].axvspan(0, win, color=_INTERCEPT, alpha=0.25, label="intercept window")
+    axes[1].set_yticks(range(len(cases)))
+    axes[1].set_yticklabels([c[1] for c in cases], fontsize=8)
+    axes[1].set_xlabel("relative scan phase")
+    axes[1].set_title("Where each sweep samples the phase")
+    axes[1].legend(fontsize=8)
+
+    report = Path("reports/scan_on_scan.json")
+    if report.is_file():
+        rows = json.loads(report.read_text(encoding="utf-8")).get("rows", [])
+        truth = np.array([r["true_period_s"] for r in rows if r.get("best_rel_error") == r.get("best_rel_error")])
+        ls = np.array([r["ls_period_s"] for r in rows if r.get("best_rel_error") == r.get("best_rel_error")])
+        ok = np.isfinite(truth) & np.isfinite(ls) & (ls > 0)
+        if ok.any():
+            axes[2].scatter(truth[ok], ls[ok], s=28, color=_ATTENTION, label="Lomb-Scargle")
+            lim = [0, max(truth[ok].max(), ls[ok].max()) * 1.1]
+            axes[2].plot(lim, lim, "--", color="0.5", label="perfect")
+            axes[2].set_xlim(lim)
+            axes[2].set_ylim(lim)
+            axes[2].legend(fontsize=8)
+    else:
+        axes[2].text(0.5, 0.5, "run `smartscan estimate` first",
+                     ha="center", va="center", transform=axes[2].transAxes, fontsize=9)
+    axes[2].set_xlabel("true scan period (s)")
+    axes[2].set_ylabel("estimated (s)")
+    axes[2].set_title("Period recovery")
+    axes[2].grid(alpha=0.3)
+
+    return _save(fig, path)
+
+
+def plot_ablation_tornado(
+    report_path: str | Path = "reports/ablation.json",
+    path: str | Path = "reports/f7_ablation_tornado.png",
+    metric: str = "twir_rate",
+    agent: str = "whittle",
+) -> Path:
+    """**F7.** Tornado chart of each ablation's effect on the headline metric.
+
+    Bars are the *change from baseline*, sorted by magnitude, so the reader sees
+    immediately which design decisions carry the result and which are noise.
+    Removing a term that changes nothing is as informative as one that changes
+    everything, and both belong on the same axis.
+
+    A zero-length bar for a reward term against an **analytic** scheduler is
+    expected, not a failure: Whittle, UCB1 and the sweep do not optimise the
+    reward, so only ``w4_retune`` and ``coverage_weight`` reach them. The
+    subtitle says so on the figure, because a chart of flat bars otherwise looks
+    like a broken pipeline.
+
+    Args:
+        report_path: JSON written by ``smartscan ablate``.
+        path: Output path.
+        metric: Metric to chart.
+        agent: Which scheduler's value to read.
+
+    Returns:
+        The path written.
+
+    Raises:
+        FileNotFoundError: If the ablation report is missing.
+    """
+    import json
+
+    plt = _plt()
+    src = Path(report_path)
+    if not src.is_file():
+        raise FileNotFoundError(f"{src} not found; run `smartscan ablate` first")
+    report = json.loads(src.read_text(encoding="utf-8"))
+
+    base = report.get("baseline", {}).get(agent, {}).get(metric)
+    if base is None:
+        raise FileNotFoundError(f"no baseline value for {agent}/{metric} in {src}")
+
+    effects: list[tuple[str, float]] = []
+    for section, variants in report.items():
+        if section in {"baseline", "config_hash", "tier", "agents", "n_seeds"}:
+            continue
+        if not isinstance(variants, dict):
+            continue
+        for name, per_agent in variants.items():
+            value = (per_agent or {}).get(agent, {}).get(metric) if isinstance(per_agent, dict) else None
+            if value is None or not np.isfinite(value):
+                continue
+            effects.append((f"{section}: {name}", 100.0 * (value - base) / max(abs(base), 1e-12)))
+
+    if not effects:
+        raise FileNotFoundError(f"no comparable variants for {agent}/{metric} in {src}")
+
+    effects.sort(key=lambda kv: abs(kv[1]))
+    labels = [e[0] for e in effects]
+    values = [e[1] for e in effects]
+    colours = [_INTERCEPT if v < 0 else _ATTENTION for v in values]
+
+    fig, ax = plt.subplots(figsize=(9.5, 0.34 * len(labels) + 2.2))
+    ax.barh(range(len(values)), values, color=colours, alpha=0.85)
+    ax.axvline(0, color="0.3", lw=1.0)
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_xlabel(f"change in {metric} vs baseline (%)")
+    ax.set_title(f"Ablation sensitivity — {agent}, {metric} (baseline {base:.4g})")
+    n_zero = sum(1 for v in values if abs(v) < 1e-9)
+    if n_zero:
+        ax.text(
+            0.5, -0.16,
+            f"{n_zero} term(s) have no effect: `{agent}` is an analytic policy and does "
+            f"not optimise the reward." + chr(10) + "Only w4_retune and coverage_weight "
+            "reach it; include ppo/dqn to ablate the reward itself.",
+            transform=ax.transAxes, ha="center", va="top", fontsize=7.5, color="0.35",
+        )
+    ax.grid(alpha=0.3, axis="x")
+    for i, v in enumerate(values):
+        ax.text(v + (1.5 if v >= 0 else -1.5), i, f"{v:+.0f}%",
+                va="center", ha="left" if v >= 0 else "right", fontsize=7)
+    return _save(fig, path)

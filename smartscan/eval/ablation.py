@@ -1,5 +1,18 @@
 """Ablations, sensitivity sweeps and distribution-shift tests.
 
+**Read the reward sweep carefully.** Removing ``w1``, ``w2``, ``w3``, ``w5`` or
+``w6`` moves an *analytic* scheduler by exactly 0.0 %, and that is correct rather
+than broken: Whittle, UCB1 and the sweep do not optimise the reward function.
+They consume only ``w4_retune`` (which sets their retune penalty) and
+``agents.coverage_weight``. The reward function is a **training signal for the RL
+agents** and a reporting quantity for everyone else. To ablate the reward
+meaningfully, include ``ppo`` or ``dqn`` in ``agents`` -- and expect the run to
+cost a training budget per variant.
+
+For the analytic policies the sweep that *does* bite is ``coverage_weight``, and
+it found something: at 2.0 rather than the default 1.0, Whittle's
+threat-weighted interception ratio rises 29 %. The default is under-tuned.
+
 The sweeps the problem brief asks for:
 
 * **reward-term removal** -- zero each ``w1..w6`` in turn;
@@ -125,8 +138,9 @@ def run_ablations(
                 print(f"[ablation] reward: drop {term}", flush=True)
             variant = config.with_overrides(reward={term: 0.0})
             out["reward"][f"without_{term}"] = evaluate_variant(variant, agents, seeds)
-        # Five-level sensitivity sweep on the coverage weight, which is the
-        # single most influential policy hyper-parameter here.
+        # Five-level sensitivity sweep on the coverage weight. For analytic
+        # policies this is the ONLY reward-adjacent knob that moves them, which
+        # is why it is swept alongside the reward terms rather than separately.
         out["coverage_weight"] = {}
         for w in (0.0, 0.25, 0.5, 1.0, 2.0):
             variant = config.with_overrides(agents={"coverage_weight": w})

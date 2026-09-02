@@ -150,6 +150,38 @@ def benchmark(
 
 
 @app.command()
+def grid(
+    tiers: str = typer.Option("easy,medium,hard", help="Comma-separated tiers."),
+    agents: str | None = typer.Option(None, help="Comma-separated agent keys."),
+    n_seeds: int = typer.Option(30, help="Seeds per tier."),
+    n_jobs: int = typer.Option(1, help="Parallel workers (joblib)."),
+    out: str = typer.Option("reports", help="Output directory."),
+    figures: bool = typer.Option(True, help="Also regenerate the figures."),
+) -> None:
+    """Run the full {schedulers} x {tiers} x {seeds} grid and write every artefact.
+
+    Emits ``results.parquet`` (tidy), ``leaderboard.md``, ``leaderboard.tex``
+    and figures F1-F7 into the output directory, with no manual steps.
+    """
+    from smartscan.eval.benchmark import run_grid
+
+    t0 = time.perf_counter()
+    keys = [a.strip() for a in agents.split(",")] if agents else None
+    results = run_grid(
+        tiers=[t.strip() for t in tiers.split(",")], agents=keys,
+        n_seeds=n_seeds, n_jobs=n_jobs, out_dir=out, figures=figures,
+    )
+    written = sorted(p.name for p in Path(out).iterdir() if p.is_file())
+    typer.echo("")
+    for name in written:
+        typer.echo(f"  {name}")
+    typer.secho(
+        f"grid complete: {len(results)} tiers in {time.perf_counter() - t0:.1f}s -> {out}/",
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command()
 def train(
     config: str = _CONFIG,
     what: str = typer.Option("ppo", "--what", "-w", help="ppo | dqn | predictor | hybrid"),

@@ -1,0 +1,25 @@
+# Normalise line endings in the repository to LF.
+#
+# Without this, a Windows checkout commits CRLF and a Linux teammate sees every
+# line of an untouched file as changed. `text=auto eol=lf` stores LF and lets
+# each working copy use its native ending.
+* text=auto eol=lf
+
+# Binary: never munge, never diff as text.
+*.png   binary
+*.jpg   binary
+*.pt    binary
+*.pth   binary
+*.onnx  binary
+*.npz   binary
+*.parquet binary
+*.h5    binary
+*.zip   binary
+
+# Notebooks are JSON: diffable, but noisy. Mark them so GitHub's language
+# statistics reflect the Python rather than the notebook JSON.
+*.ipynb text linguist-documentation
+
+# Generated corpora and reports are not source.
+build/**    linguist-generated
+reports/**  linguist-generated

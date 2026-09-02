@@ -37,9 +37,12 @@ __all__ = [
     "BenchmarkResult",
     "Comparison",
     "holm_bonferroni",
+    "leaderboard_latex",
     "leaderboard_markdown",
     "run_benchmark",
     "run_grid",
+    "tidy_frame",
+    "write_results_parquet",
 ]
 
 #: Metrics where a *smaller* value is better. Everything else is
@@ -324,12 +327,154 @@ def leaderboard_markdown(result: BenchmarkResult, metrics: Sequence[str] | None 
     return "\n".join(lines)
 
 
+def tidy_frame(result: BenchmarkResult) -> Any:
+    """Return the per-(agent, seed, metric) results in **tidy** long form.
+
+    One row per observation rather than one per run, because every downstream
+    consumer -- a group-by, a facet plot, a statistical test -- wants it that
+    way, and a wide table forces each of them to melt it first.
+
+    Args:
+        result: The benchmark output.
+
+    Returns:
+        A ``pandas.DataFrame`` with columns ``tier, agent, seed, metric, value,
+        is_baseline, config_hash``.
+
+    Raises:
+        ImportError: If pandas is not installed.
+    """
+    try:
+        import pandas as pd
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            'pandas is required for tidy output; install `pip install "smartscan[viz]"`.'
+        ) from exc
+
+    records = []
+    for row in result.rows:
+        for key, value in row.items():
+            if key in {"agent", "seed"} or isinstance(value, (str, dict, list)):
+                continue
+            records.append(
+                {
+                    "tier": result.tier,
+                    "agent": row["agent"],
+                    "seed": int(row["seed"]),
+                    "metric": key,
+                    "value": float(value),
+                    "is_baseline": row["agent"] == result.baseline,
+                    "config_hash": result.config_hash,
+                }
+            )
+    return pd.DataFrame.from_records(records)
+
+
+def write_results_parquet(
+    results: BenchmarkResult | Sequence[BenchmarkResult],
+    path: str | Path = "reports/results.parquet",
+) -> Path:
+    """Write the tidy results table, appending across tiers.
+
+    Args:
+        results: One benchmark result, or several to concatenate.
+        path: Destination parquet path.
+
+    Returns:
+        The path written.
+    """
+    import pandas as pd
+
+    batch = [results] if isinstance(results, BenchmarkResult) else list(results)
+    frame = pd.concat([tidy_frame(r) for r in batch], ignore_index=True)
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(p, index=False, compression="zstd")
+    return p
+
+
+def _latex_escape(text: str) -> str:
+    """Escape the LaTeX specials that appear in agent and metric names."""
+    for char, repl in (("_", r"\_"), ("%", r"\%"), ("&", r"\&"), ("#", r"\#")):
+        text = text.replace(char, repl)
+    return text
+
+
+def leaderboard_latex(
+    result: BenchmarkResult,
+    metrics: Sequence[str] | None = None,
+    caption: str | None = None,
+    label: str = "tab:leaderboard",
+) -> str:
+    """Render the paired comparison as a LaTeX table for the report.
+
+    Significance is marked with a dagger rather than a colour, so the table
+    survives being printed in black and white -- and the confidence interval is
+    shown beside every point estimate, because a bare percentage invites the
+    reader to over-read it.
+
+    Args:
+        result: The benchmark output.
+        metrics: Metrics to include; a compact default is used if omitted.
+        caption: Table caption.
+        label: LaTeX label.
+
+    Returns:
+        A ``table`` environment as a string.
+    """
+    metrics = list(metrics or ["ttfi_hard_median_s", "twir_rate", "coverage"])
+    chosen = [c for c in result.comparisons if c.metric in metrics]
+    if not chosen:
+        return "% no comparisons available\n"
+
+    head = (
+        "\\begin{table}[t]\n"
+        "  \\centering\n"
+        "  \\small\n"
+        "  \\begin{tabular}{llrrrr}\n"
+        "    \\toprule\n"
+        "    Scheduler & Metric & Baseline & Agent & Improvement (95\\% CI) & $p$ \\\\\n"
+        "    \\midrule\n"
+    )
+    body = ""
+    for metric in metrics:
+        for c in [x for x in chosen if x.metric == metric]:
+            mark = "$^{\\dagger}$" if c.significant else ""
+            body += (
+                f"    \\texttt{{{_latex_escape(c.agent)}}} & "
+                f"{_latex_escape(c.metric)} & "
+                f"{c.baseline_median:.4g} & {c.agent_median:.4g} & "
+                f"{100 * c.improvement:+.1f}\\% "
+                f"[{100 * c.ci_lo:+.1f}, {100 * c.ci_hi:+.1f}]{mark} & "
+                f"{c.p_holm:.3g} \\\\\n"
+            )
+        body += "    \\midrule\n"
+    body = body.rsplit("    \\midrule\n", 1)[0]
+
+    n_seeds = len({r["seed"] for r in result.rows})
+    default_caption = (
+        f"Paired comparison against \\texttt{{{_latex_escape(result.baseline)}}} on the "
+        f"{result.tier} tier, {n_seeds} seeds. Improvement is signed so positive is "
+        f"better; intervals are 95\\% paired bootstrap. $p$ is Wilcoxon signed-rank "
+        f"after Holm--Bonferroni correction; $\\dagger$ marks $p < 0.05$."
+    )
+    tail = (
+        "    \\bottomrule\n"
+        "  \\end{tabular}\n"
+        f"  \\caption{{{caption or default_caption}}}\n"
+        f"  \\label{{{label}}}\n"
+        "\\end{table}\n"
+    )
+    return head + body + tail
+
+
 def run_grid(
     tiers: Sequence[str] = ("easy", "medium", "hard"),
     agents: Iterable[str] | None = None,
     n_seeds: int | None = None,
     n_jobs: int = 1,
     out_dir: str | Path = "reports",
+    figures: bool = True,
 ) -> dict[str, BenchmarkResult]:
     """Run the full {schedulers} x {tiers} x {seeds} grid.
 
@@ -338,7 +483,10 @@ def run_grid(
         agents: Scheduler keys; defaults to each tier's ``eval.agents``.
         n_seeds: Override the seed count.
         n_jobs: Parallel workers.
-        out_dir: Directory for ``metrics_<tier>.json`` and the leaderboard.
+        out_dir: Directory for every artefact: ``metrics_<tier>.json``,
+            ``results.parquet``, ``leaderboard.md``, ``leaderboard.tex`` and the
+            figures.
+        figures: Also regenerate the figures.
 
     Returns:
         Mapping from tier name to :class:`BenchmarkResult`.
@@ -347,16 +495,78 @@ def run_grid(
     out.mkdir(parents=True, exist_ok=True)
     results: dict[str, BenchmarkResult] = {}
     sections: list[str] = []
+    latex: list[str] = []
+    last_cfg = None
 
     for tier in tiers:
         cfg = load_config(f"{tier}.yaml")
         if n_seeds is not None:
             cfg = cfg.with_overrides(run={"n_seeds": n_seeds})
-        print(f"[benchmark] tier={tier} agents={list(agents or cfg.eval.agents)} seeds={cfg.run.n_seeds}")
+        last_cfg = cfg
+        print(
+            f"[benchmark] tier={tier} agents={list(agents or cfg.eval.agents)} "
+            f"seeds={cfg.run.n_seeds} jobs={n_jobs}"
+        )
         res = run_benchmark(cfg, agents=agents, n_jobs=n_jobs)
         res.to_json(out / f"metrics_{tier}.json")
         results[tier] = res
         sections.append(leaderboard_markdown(res))
+        latex.append(leaderboard_latex(res, label=f"tab:leaderboard-{tier}"))
 
     (out / "leaderboard.md").write_text("\n\n".join(sections), encoding="utf-8")
+    (out / "leaderboard.tex").write_text("\n".join(latex), encoding="utf-8")
+    try:
+        write_results_parquet(list(results.values()), out / "results.parquet")
+    except ImportError:
+        print("[benchmark] pandas missing; skipping results.parquet")
+
+    if figures and last_cfg is not None:
+        try:
+            _write_figures(results, last_cfg, out, n_seeds or 6)
+        except ImportError as exc:
+            print(f"[benchmark] figures skipped: {exc}")
     return results
+
+
+def _write_figures(
+    results: dict[str, BenchmarkResult],
+    config: Config,
+    out: Path,
+    n_seeds: int,
+) -> None:
+    """Regenerate every figure the report needs, from re-run episodes.
+
+    The benchmark keeps only scalar metrics per seed, so the figures need
+    trajectories. Re-running a handful of episodes is cheaper and less
+    error-prone than carrying every ``(B, T)`` mask through the grid.
+    """
+    from smartscan.eval import plots
+
+    tier = "medium" if "medium" in results else next(iter(results))
+    # Reload per-tier rather than reusing `config`, which is whichever tier ran
+    # last; the figures must describe the tier they are labelled with.
+    cfg = load_config(f"{tier}.yaml") if tier != config.scenario.difficulty else config
+    keys = [a for a in ("sequential", "ucb1", "whittle", "coprime_sweep") if a in
+            {r["agent"] for r in results[tier].rows}]
+    if not keys:
+        keys = ["sequential"]
+
+    per_agent: dict[str, list[Any]] = {k: [] for k in keys}
+    for i in range(min(n_seeds, 6)):
+        seed = cfg.run.seed + i
+        scenario = generate_scenario(seed, config=cfg)
+        episode = build_episode(scenario)
+        for key in keys:
+            per_agent[key].append(
+                run_episode(
+                    cfg, seed, build_agent(key, cfg, seed, scenario),
+                    scenario=scenario, episode=episode,
+                )
+            )
+
+    written = plots.save_all(per_agent, cfg, out)
+    written.append(plots.plot_scan_on_scan(cfg, out / "f6_scan_on_scan.png"))
+    ablation = out / "ablation.json"
+    if ablation.is_file():
+        written.append(plots.plot_ablation_tornado(ablation, out / "f7_ablation_tornado.png"))
+    print(f"[benchmark] wrote {len(written)} figures to {out}/")

@@ -288,3 +288,96 @@ def test_sensitivity_is_a_single_number_per_config():
     assert np.isfinite(s["pulse_single_db"]) and np.isfinite(s["energy_db"])
     # Integration gain must make the energy regime the more sensitive one.
     assert s["energy_db"] < s["pulse_single_db"]
+
+
+# --------------------------------------------------------------------------- #
+# Benchmark artefacts (Prompt B acceptance)
+# --------------------------------------------------------------------------- #
+def _tiny_benchmark(agents=("sequential", "ucb1")):
+    """Run a small benchmark, cheap enough for the fast suite.
+
+    Four seeds, not two: ``run_benchmark`` skips any comparison backed by fewer
+    than three paired observations, so a two-seed run produces no comparisons
+    at all and nothing to render.
+    """
+    from smartscan.eval.benchmark import run_benchmark
+
+    cfg = load_config("easy.yaml").with_overrides(run={"n_seeds": 4})
+    return run_benchmark(
+        cfg, agents=list(agents), metrics=["twir_rate", "coverage"], progress=False
+    )
+
+
+def test_tidy_frame_is_long_not_wide():
+    """Every downstream consumer wants long form; a wide table forces a melt."""
+    pytest.importorskip("pandas")
+    from smartscan.eval.benchmark import tidy_frame
+
+    frame = tidy_frame(_tiny_benchmark())
+    assert set(frame.columns) == {
+        "tier", "agent", "seed", "metric", "value", "is_baseline", "config_hash"
+    }
+    assert frame["agent"].nunique() == 2
+    assert frame["seed"].nunique() == 4
+    assert frame["is_baseline"].any() and not frame["is_baseline"].all()
+    # One row per (agent, seed, metric) -- never a wide row per run.
+    assert len(frame) == len(frame.drop_duplicates(["agent", "seed", "metric"]))
+
+
+def test_results_parquet_round_trips(tmp_path):
+    pytest.importorskip("pyarrow")
+    import pandas as pd
+
+    from smartscan.eval.benchmark import write_results_parquet
+
+    path = write_results_parquet(_tiny_benchmark(), tmp_path / "results.parquet")
+    assert path.is_file()
+    frame = pd.read_parquet(path)
+    assert len(frame) > 0
+    assert set(frame.columns) >= {"tier", "agent", "seed", "metric", "value"}
+    # NaN is a legitimate value here -- popup_latency_s on a tier with no
+    # pop-ups, for instance -- so the check is on schema and dtype, not on
+    # every cell being finite.
+    assert frame["value"].dtype.kind == "f"
+    assert frame["metric"].nunique() > 1
+
+
+def test_latex_table_is_wellformed_and_marks_significance():
+    from smartscan.eval.benchmark import leaderboard_latex
+
+    tex = leaderboard_latex(_tiny_benchmark(), metrics=["twir_rate"])
+    assert tex.count(r"\begin{table}") == 1
+    assert tex.count(r"\end{table}") == 1
+    assert tex.count(r"\begin{tabular}") == tex.count(r"\end{tabular}") == 1
+    assert r"\toprule" in tex and r"\bottomrule" in tex
+    # The caption must say what the interval and the dagger mean, or a reader
+    # will over-read a bare percentage.
+    assert "bootstrap" in tex and "Holm" in tex
+    assert r"\label{tab:leaderboard}" in tex
+
+
+def test_latex_escapes_underscores_in_names():
+    """Agent keys contain underscores, which are LaTeX maths mode if unescaped."""
+    from smartscan.eval.benchmark import leaderboard_latex
+
+    result = _tiny_benchmark(agents=("sequential", "priority_rr"))
+    tex = leaderboard_latex(result, metrics=["twir_rate"])
+    assert r"priority\_rr" in tex
+    assert "priority_rr" not in tex.replace(r"priority\_rr", "")
+
+
+def test_scan_on_scan_figure_renders(tmp_path):
+    pytest.importorskip("matplotlib")
+    from smartscan.eval.plots import plot_scan_on_scan
+
+    path = plot_scan_on_scan(load_config("easy.yaml"), tmp_path / "f6.png")
+    assert path.is_file() and path.stat().st_size > 10_000
+
+
+def test_tornado_needs_an_ablation_report(tmp_path):
+    """It must say what to run, not raise an opaque KeyError."""
+    pytest.importorskip("matplotlib")
+    from smartscan.eval.plots import plot_ablation_tornado
+
+    with pytest.raises(FileNotFoundError, match="smartscan ablate"):
+        plot_ablation_tornado(tmp_path / "missing.json", tmp_path / "f7.png")

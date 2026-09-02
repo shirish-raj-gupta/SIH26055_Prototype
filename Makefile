@@ -11,7 +11,7 @@ REPORTS ?= reports
 
 .DEFAULT_GOAL := help
 .PHONY: help install install-min demo test test-fast test-acceptance lint fmt \
-        benchmark benchmark-easy benchmark-hard train-predictor train-ppo train-dqn \
+        benchmark benchmark-medium benchmark-easy benchmark-hard grid train-predictor train-ppo train-dqn \
         train-all estimate ablate reproduce reproduce-easy clean coverage \n        dataset dataset-smoke dataset-verify publish publish-dry publish-models \n        credentials external info
 
 help:  ## Show this help
@@ -62,7 +62,13 @@ fmt:  ## ruff format + autofix
 # --------------------------------------------------------------------------- #
 # Benchmarks
 # --------------------------------------------------------------------------- #
-benchmark:  ## Paired benchmark on MEDIUM (the headline tier)
+benchmark:  ## Full grid -> results.parquet, leaderboard.md/.tex and all 7 figures
+	$(CLI) ablate --config configs/medium.yaml --which reward --n-seeds 8 --out $(REPORTS)/ablation.json
+	$(CLI) estimate --config configs/scan_on_scan.yaml --n-seeds 6 --out $(REPORTS)/scan_on_scan.json
+	$(CLI) grid --tiers easy,medium,hard --n-seeds $(SEEDS) --n-jobs $(JOBS) --out $(REPORTS)
+	@echo "artefacts -> $(REPORTS)/  (results.parquet, leaderboard.md, leaderboard.tex, f1..f7)"
+
+benchmark-medium:  ## Paired benchmark on MEDIUM only
 	$(CLI) benchmark --config configs/medium.yaml --n-seeds $(SEEDS) --n-jobs $(JOBS) --out $(REPORTS)
 
 benchmark-easy:  ## Paired benchmark on EASY
