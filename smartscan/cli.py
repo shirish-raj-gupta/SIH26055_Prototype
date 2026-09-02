@@ -212,7 +212,7 @@ def train(
     elif what == "predictor":
         import torch
 
-        from smartscan.agents.predictors import train_predictor
+        from smartscan.agents.predictors import save_predictor_checkpoint, train_predictor
 
         if steps:
             # --steps must bound the WHOLE job, not just the student. The
@@ -232,7 +232,7 @@ def train(
             )
         model, history = train_predictor(cfg, seeds=train_seeds, arch=arch)
         path = ckpt_dir / f"predictor_{tier}.pt"
-        torch.save(model.state_dict(), path)
+        save_predictor_checkpoint(model, history["arch"], path)
         _write_json(ckpt_dir / f"predictor_{tier}_history.json", history)
         def _fmt(scores: dict[str, float]) -> str:
             return (

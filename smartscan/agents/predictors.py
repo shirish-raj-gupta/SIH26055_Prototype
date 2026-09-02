@@ -51,6 +51,7 @@ while evaluation mode is set.
 from __future__ import annotations
 
 import threading
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -405,6 +406,58 @@ def masked_focal_loss(
     return (loss * m).sum() / m.sum().clamp(min=1.0)
 
 
+def save_predictor_checkpoint(model: Any, arch: str, path: str | Path) -> None:
+    """Save weights together with the architecture that produced them.
+
+    A bare ``state_dict`` does not say which network it came from, so loading
+    one falls back to whatever ``config.predictor.arch`` happens to be. Train
+    with ``--arch transformer`` against a config defaulting to ``gru`` and the
+    checkpoint is simply unloadable -- which is exactly what happened.
+
+    Args:
+        model: Trained module.
+        arch: Architecture key the weights belong to.
+        path: Destination file.
+    """
+    torch = _require_torch()
+    torch.save({"arch": arch, "state_dict": model.state_dict()}, Path(path))
+
+
+def load_predictor_checkpoint(config: Config, path: str | Path, torch: Any = None) -> Any:
+    """Rebuild a predictor from a checkpoint, honouring its recorded arch.
+
+    Accepts both the tagged format written by :func:`save_predictor_checkpoint`
+    and older bare ``state_dict`` files, which are assumed to match the config.
+
+    Args:
+        config: Resolved configuration.
+        path: Checkpoint file.
+        torch: Imported torch module, if the caller already has one.
+
+    Returns:
+        The loaded module, in eval-ready state.
+
+    Raises:
+        RuntimeError: If the weights do not fit the architecture named.
+    """
+    torch = torch or _require_torch()
+    blob = torch.load(Path(path), map_location="cpu", weights_only=True)
+    if isinstance(blob, dict) and "state_dict" in blob:
+        arch, state = blob.get("arch"), blob["state_dict"]
+    else:
+        arch, state = None, blob
+    model = build_predictor(config, arch)
+    try:
+        model.load_state_dict(state)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"{Path(path).name} does not fit arch {arch or config.predictor.arch!r}. "
+            "Checkpoints written before architectures were recorded must be "
+            "retrained, or loaded with a config whose predictor.arch matches."
+        ) from exc
+    return model
+
+
 def train_predictor(
     config: Config,
     dataset: PredictorDataset | None = None,
@@ -488,8 +541,23 @@ def train_predictor(
     # climbs steadily, so returning the final epoch would ship the *most*
     # overfit model of the run -- and then score it against privileged truth,
     # reporting a number no deployment would ever see.
+    #
+    # Select on average precision, NOT on the loss. Occupancy is ~8 % positive,
+    # so the masked focal loss is minimised by predicting "idle" everywhere:
+    # selecting on it picked epoch 1 of a real run and shipped a model with
+    # recall 0.000 and predicted_positive_rate 0.000 -- a constant "no" wearing
+    # 0.91 accuracy, which is exactly the base rate. AP collapses to the base
+    # rate for that model instead of rewarding it.
+    #
+    # The AP used for selection is computed against the OBSERVED labels under
+    # their mask, never against privileged truth: the teacher may see the full
+    # tensor during training, but choosing which epoch to ship with it would
+    # leak privileged information into the delivered artefact.
     import copy
 
+    from smartscan.analysis.metrics import prediction_scores
+
+    best_ap = -1.0
     best_val = float("inf")
     best_state = copy.deepcopy(student.state_dict())
     best_epoch = 0
@@ -516,29 +584,42 @@ def train_predictor(
             n += 1
 
         student.eval()
+        obs_p: list[np.ndarray] = []
+        obs_y: list[np.ndarray] = []
         with torch.no_grad():
             vl = vn = 0.0
             for x, y, m, _yt in batches(val, shuffle=False):
-                vl += float(masked_focal_loss(student(x), y, m, pc.focal_gamma, pc.focal_alpha))
+                logits = student(x)
+                vl += float(masked_focal_loss(logits, y, m, pc.focal_gamma, pc.focal_alpha))
                 vn += 1
+                sel = m.numpy().astype(bool)
+                if sel.any():
+                    obs_p.append(torch.sigmoid(logits).numpy()[sel])
+                    obs_y.append(y.numpy()[sel])
         val_loss = vl / max(vn, 1)
+        val_ap = float("nan")
+        if obs_p:
+            val_ap = prediction_scores(
+                np.concatenate(obs_y), np.concatenate(obs_p)
+            )["average_precision"]
         history["student_loss"].append(tot / max(n, 1))
         history["val_loss"].append(val_loss)
-        improved = val_loss < best_val - 1e-6
+        history.setdefault("val_ap", []).append(val_ap)
+        improved = np.isfinite(val_ap) and val_ap > best_ap + 1e-6
         if improved:
-            best_val, best_epoch = val_loss, ep + 1
+            best_ap, best_val, best_epoch = val_ap, val_loss, ep + 1
             best_state = copy.deepcopy(student.state_dict())
         if verbose:
             print(
                 f"  student epoch {ep + 1}/{pc.epochs} train={tot / max(n, 1):.4f} "
-                f"val={val_loss:.4f}{' *' if improved else ''}",
+                f"val={val_loss:.4f} ap={val_ap:.4f}{' *' if improved else ''}",
                 flush=True,
             )
         if pc.patience and ep + 1 - best_epoch >= pc.patience:
             if verbose:
                 print(
-                    f"  early stop: no val improvement in {pc.patience} epochs "
-                    f"(best {best_val:.4f} @ epoch {best_epoch})",
+                    f"  early stop: no AP improvement in {pc.patience} epochs "
+                    f"(best ap {best_ap:.4f} @ epoch {best_epoch})",
                     flush=True,
                 )
             break
@@ -546,6 +627,7 @@ def train_predictor(
     student.load_state_dict(best_state)
     history["best_epoch"] = best_epoch
     history["best_val_loss"] = best_val
+    history["best_val_ap"] = best_ap
 
     # -- 3. honest scoring against PRIVILEGED truth ------------------------ #
     from smartscan.analysis.metrics import prediction_scores
@@ -565,6 +647,23 @@ def train_predictor(
         with torch.no_grad():
             t_probs = torch.sigmoid(teacher(torch.as_tensor(val.x))).numpy()
         history["teacher_scores_vs_truth"] = prediction_scores(val.y_true, t_probs)
+
+    # A model that never predicts a positive is a constant "idle" detector. On
+    # ~8 % positives it still reports ~0.91 accuracy, so nothing downstream will
+    # notice unless it is said out loud here.
+    scores = history["scores_vs_truth"]
+    history["degenerate"] = scores.get("predicted_positive_rate", 0.0) <= 0.0
+    if history["degenerate"]:
+        warnings.warn(
+            f"predictor predicts NO positives at threshold "
+            f"{scores.get('threshold', 0.5)}: recall {scores.get('recall', 0.0):.3f}, "
+            f"AP {scores.get('average_precision', float('nan')):.3f} against a "
+            f"{scores.get('positive_rate', float('nan')):.3f} base rate. Its "
+            f"{scores.get('accuracy', float('nan')):.3f} accuracy is the base rate, "
+            "not skill. Train on more episodes before using it.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     return student, history
 
@@ -611,8 +710,7 @@ class SequencePredictorScheduler(Scheduler):
         )
         if self.model is None:
             if path.is_file():
-                self.model = build_predictor(config)
-                self.model.load_state_dict(self.torch.load(path, map_location="cpu", weights_only=True))
+                self.model = load_predictor_checkpoint(config, path, self.torch)
                 self.model.eval()
             else:
                 from smartscan.agents.bandits import UCB1

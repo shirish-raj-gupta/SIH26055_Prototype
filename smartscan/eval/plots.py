@@ -142,18 +142,37 @@ def plot_survival(
         The path written.
     """
     plt = _plt()
+
+    def _gather(sel: frozenset[str] | None) -> dict[str, tuple[list[float], list[bool]]]:
+        out: dict[str, tuple[list[float], list[bool]]] = {}
+        for key, results in per_agent.items():
+            durations: list[float] = []
+            observed: list[bool] = []
+            for res in results:
+                if res.episode is None:
+                    continue
+                d = time_to_first_intercept(res.episode, res.first_intercept, classes=sel)
+                durations.extend(d["durations_s"])
+                observed.extend(d["observed"])
+            if durations:
+                out[key] = (durations, observed)
+        return out
+
+    # EASY contains no scanning radars at all, so the default hard-class filter
+    # selects nothing there and this figure used to render as a fully-formed,
+    # titled, empty frame -- the most misleading thing a plot can do. Fall back
+    # to every class and say so on the figure rather than show a convincing void.
+    data = _gather(classes)
+    note = ""
+    if not data and classes is not None:
+        data = _gather(None)
+        note = (
+            f"no {'/'.join(sorted(classes))} emitters in this tier; "
+            "showing all emitter classes"
+        )
+
     fig, ax = plt.subplots(figsize=(9, 5))
-    for key, results in per_agent.items():
-        durations: list[float] = []
-        observed: list[bool] = []
-        for res in results:
-            if res.episode is None:
-                continue
-            d = time_to_first_intercept(res.episode, res.first_intercept, classes=classes)
-            durations.extend(d["durations_s"])
-            observed.extend(d["observed"])
-        if not durations:
-            continue
+    for key, (durations, observed) in data.items():
         curve = kaplan_meier(np.asarray(durations), np.asarray(observed))
         median = "inf" if not np.isfinite(curve.median) else f"{curve.median:.2f} s"
         ax.step(
@@ -167,7 +186,15 @@ def plot_survival(
     ax.set_title("Time to first intercept (Kaplan-Meier, censored observations retained)")
     ax.set_ylim(-0.02, 1.02)
     ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
+    if data:
+        ax.legend(fontsize=9)
+        if note:
+            ax.text(0.5, -0.14, note, transform=ax.transAxes, ha="center", va="top",
+                    fontsize=8, color="0.35")
+    else:
+        ax.text(0.5, 0.5, "no interceptable emitters in these runs",
+                transform=ax.transAxes, ha="center", va="center",
+                fontsize=12, color="0.45")
     return _save(fig, path)
 
 
