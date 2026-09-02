@@ -9,9 +9,19 @@ agents** and a reporting quantity for everyone else. To ablate the reward
 meaningfully, include ``ppo`` or ``dqn`` in ``agents`` -- and expect the run to
 cost a training budget per variant.
 
-For the analytic policies the sweep that *does* bite is ``coverage_weight``, and
-it found something: at 2.0 rather than the default 1.0, Whittle's
-threat-weighted interception ratio rises 29 %. The default is under-tuned.
+For the analytic policies the sweep that *does* bite is ``coverage_weight`` --
+but only read it at enough seeds. **Erratum.** A five-seed run of this ablation
+reported Whittle's threat-weighted interception ratio rising 29 % at a weight of
+2.0, and that did not replicate: ``scripts/sweep_coverage_weight.py`` at twelve
+*paired* seeds puts the same effect at +14.7 % with a 95 % CI of [-26 %, +58 %],
+and TWIR then *falls* at 4.0 and 8.0. What survives pairing is
+``staleness_max_s``, which drops monotonically with the weight (Whittle 1.82 s ->
+1.01 s at 4.0 -> 0.61 s at 8.0, CIs excluding zero) at flat coverage. So the knob
+is a documented interception-versus-worst-case-staleness trade, not free
+performance, and the shipped default of 1.0 stands: it sits at the TWIR optimum
+and already takes most of the available staleness reduction before interception
+starts to degrade. UCB1 is insensitive to the weight on every metric -- its own
+exploration bonus already dominates the staleness term.
 
 The sweeps the problem brief asks for:
 
