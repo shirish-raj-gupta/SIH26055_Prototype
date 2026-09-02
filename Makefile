@@ -10,7 +10,7 @@ JOBS    ?= 1
 REPORTS ?= reports
 
 .DEFAULT_GOAL := help
-.PHONY: help install install-min demo test test-fast test-acceptance lint fmt \
+.PHONY: help install install-min demo smoke test test-fast test-acceptance lint fmt \
         benchmark benchmark-medium benchmark-easy benchmark-hard grid train-predictor train-ppo train-dqn \
         train-all estimate ablate reproduce reproduce-easy clean coverage \n        dataset dataset-smoke dataset-verify publish publish-dry publish-models \n        credentials external info
 
@@ -30,7 +30,10 @@ install-min:  ## Install core only (no torch): env, analytic schedulers, benchma
 # --------------------------------------------------------------------------- #
 # Quick looks
 # --------------------------------------------------------------------------- #
-demo:  ## ~1 min end-to-end smoke run (environment, schedulers, scan-on-scan)
+demo:  ## Launch the live dashboard in a browser (offline, one command)
+	$(PY) -m streamlit run dashboard/app.py
+
+smoke:  ## ~1 min terminal smoke run (environment, schedulers, scan-on-scan)
 	$(CLI) demo --config configs/easy.yaml
 
 info:  ## Print the resolved MEDIUM config and its hash

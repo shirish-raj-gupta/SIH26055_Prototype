@@ -11,10 +11,10 @@ The receiver sees **1/32 of the band at a time**. The other 31/32 is not empty;
 it is *unknown*. Everything here follows from that.
 
 ```bash
-pip install -e ".[ml,viz]"
-python -m smartscan.cli demo          # ~1 min: environment, schedulers, scan-on-scan
-python -m smartscan.cli benchmark --config configs/medium.yaml --n-seeds 30
-pytest -q                             # 80+ tests
+pip install -e ".[ml,viz,demo]"
+make demo         # live dashboard in a browser — offline, one command
+make benchmark    # results.parquet, leaderboard.md/.tex and figures F1–F7
+pytest -q         # 175 tests
 ```
 
 ---
@@ -58,7 +58,9 @@ smartscan/
   eval/        benchmark · ablation · scan_validation · plots
   data/        schema · dataset_builder · kaggle_io · tsrd_bridge
   hal/         backend (ABC) · simulated · soapy_stub
-  cli.py       run | benchmark | train | estimate | ablate | demo | reproduce | info
+  cli.py       run | benchmark | grid | train | estimate | ablate | external
+               data | credentials | demo | reproduce | info
+dashboard/     app.py — live Streamlit demo
 configs/       base · easy · medium · hard · scan_on_scan
 docs/          architecture · theory · related_work · config_schema · hardware_roadmap
 notebooks/     4 local + 2 Kaggle training notebooks
@@ -272,6 +274,33 @@ benchmark and the tests run without them. Secrets are read from the environment,
 a gitignored `.env`, or the provider's own config file — never from the tree,
 and only ever reported as an 8-character fingerprint so a rotation is verifiable
 without the value appearing in a log.
+
+---
+
+## Live demo
+
+`make demo` opens a browser. No network call, ever — episodes are generated from
+seeds in ~50 ms, so a captive-portal venue cannot break it.
+
+The waterfall is the whole argument in one picture: **grey** is what is on the
+air, the **blue band** is where the receiver is looking right now, **red** marks
+are confirmed intercepts, and **dark red** is signal that transmitted while the
+receiver was looking elsewhere.
+
+* **A/B mode** runs two schedulers on the *same seed*, side by side, with a
+  running delta. Because the detection realisation is drawn from the scenario
+  seed, both face identical luck — so every difference is the policy.
+* **Scheduler reasoning** names the top five channels by belief and explains the
+  current choice in one line (`ch 41–44: P(active)=0.72 + stale 820 ms`).
+  Explainability is what a defence evaluator asks for second, right after
+  "does it work".
+* **Pop-up injection** spawns a threat mid-episode so you can watch which policy
+  notices.
+* **60-second auto-demo** plays unattended.
+
+A test asserts the dashboard's live run is *identical* to `run_episode` on the
+same seed — a demo that quietly disagrees with the reported numbers is worse
+than no demo.
 
 ---
 
