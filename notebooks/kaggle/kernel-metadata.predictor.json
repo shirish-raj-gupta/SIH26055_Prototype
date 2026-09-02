@@ -4,7 +4,7 @@
   "code_file": "train_predictor_kaggle.ipynb",
   "language": "python",
   "kernel_type": "notebook",
-  "is_private": false,
+  "is_private": true,
   "enable_gpu": true,
   "enable_tpu": false,
   "enable_internet": true,
