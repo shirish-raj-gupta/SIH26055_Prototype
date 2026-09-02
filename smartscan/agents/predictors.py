@@ -468,6 +468,17 @@ def train_predictor(
     opt = torch.optim.Adam(student.parameters(), lr=pc.lr)
     temp = pc.distillation.temperature
 
+    # Keep the best-validating weights, not the last ones. On this data the
+    # student's validation loss bottoms out within the first few epochs and then
+    # climbs steadily, so returning the final epoch would ship the *most*
+    # overfit model of the run -- and then score it against privileged truth,
+    # reporting a number no deployment would ever see.
+    import copy
+
+    best_val = float("inf")
+    best_state = copy.deepcopy(student.state_dict())
+    best_epoch = 0
+
     for ep in range(pc.epochs):
         student.train()
         tot = n = 0.0
@@ -495,10 +506,31 @@ def train_predictor(
             for x, y, m, _yt in batches(val, shuffle=False):
                 vl += float(masked_focal_loss(student(x), y, m, pc.focal_gamma, pc.focal_alpha))
                 vn += 1
+        val_loss = vl / max(vn, 1)
         history["student_loss"].append(tot / max(n, 1))
-        history["val_loss"].append(vl / max(vn, 1))
+        history["val_loss"].append(val_loss)
+        improved = val_loss < best_val - 1e-6
+        if improved:
+            best_val, best_epoch = val_loss, ep + 1
+            best_state = copy.deepcopy(student.state_dict())
         if verbose:
-            print(f"  student epoch {ep + 1}/{pc.epochs} train={tot / max(n, 1):.4f} val={vl / max(vn, 1):.4f}", flush=True)
+            print(
+                f"  student epoch {ep + 1}/{pc.epochs} train={tot / max(n, 1):.4f} "
+                f"val={val_loss:.4f}{' *' if improved else ''}",
+                flush=True,
+            )
+        if pc.patience and ep + 1 - best_epoch >= pc.patience:
+            if verbose:
+                print(
+                    f"  early stop: no val improvement in {pc.patience} epochs "
+                    f"(best {best_val:.4f} @ epoch {best_epoch})",
+                    flush=True,
+                )
+            break
+
+    student.load_state_dict(best_state)
+    history["best_epoch"] = best_epoch
+    history["best_val_loss"] = best_val
 
     # -- 3. honest scoring against PRIVILEGED truth ------------------------ #
     from smartscan.analysis.metrics import prediction_scores

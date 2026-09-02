@@ -553,6 +553,10 @@ class PredictorConfig(_Base):
     lr: float = Field(default=3.0e-4, gt=0)
     batch_size: int = Field(default=64, gt=0)
     epochs: int = Field(default=20, ge=0)
+    #: Stop after this many epochs with no validation improvement; 0 disables.
+    #: The best-validating weights are restored either way, so this only bounds
+    #: wall time -- it never changes which weights are returned.
+    patience: int = Field(default=6, ge=0)
     distillation: DistillationConfig = DistillationConfig()
 
 
