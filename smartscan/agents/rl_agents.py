@@ -59,10 +59,21 @@ def _require_torch() -> Any:
     return torch
 
 
-def _split_obs(flat: Any, n_channels: int) -> tuple[Any, Any]:
-    """Split a flat observation into a ``(N, F, B)`` map and ``(N, G)`` globals."""
-    n_map = n_channels * N_CHANNEL_FEATURES
-    chan = flat[..., :n_map].reshape(-1, n_channels, N_CHANNEL_FEATURES).transpose(1, 2)
+def _split_obs(flat: Any, n_channels: int, n_features: int = N_CHANNEL_FEATURES) -> tuple[Any, Any]:
+    """Split a flat observation into a ``(N, F, B)`` map and ``(N, G)`` globals.
+
+    Args:
+        flat: Batch of flat observations, shape ``(N, B*F + G)``.
+        n_channels: Band size ``B``.
+        n_features: Per-channel feature count ``F``. The hybrid observation
+            carries one extra plane -- the predictor's occupancy probability --
+            so this is not always ``N_CHANNEL_FEATURES``.
+
+    Returns:
+        ``((N, F, B) channel map, (N, G) globals)``.
+    """
+    n_map = n_channels * n_features
+    chan = flat[..., :n_map].reshape(-1, n_channels, n_features).transpose(1, 2)
     glob = flat[..., n_map:]
     return chan, glob
 
@@ -105,17 +116,21 @@ def _make_actor_critic() -> type:
         """
 
         def __init__(
-            self, n_channels: int, hidden: int = 256, encoder: str = "conv1d", duelling: bool = True
+            self, n_channels: int, hidden: int = 256, encoder: str = "conv1d",
+            duelling: bool = True, n_features: int = N_CHANNEL_FEATURES,
         ) -> None:
             super().__init__()
             self.n_channels = n_channels
             self.encoder_kind = encoder
             self.duelling = duelling
+            # The hybrid observation appends the predictor's probability to each
+            # channel, so the input width is a parameter rather than a constant.
+            self.n_features = n_features
             width = max(hidden // 4, 32)
 
             if encoder == "conv1d":
                 self.trunk = nn.Sequential(
-                    nn.Conv1d(N_CHANNEL_FEATURES, width, kernel_size=5, padding=2),
+                    nn.Conv1d(n_features, width, kernel_size=5, padding=2),
                     nn.ReLU(),
                     nn.Conv1d(width, width, kernel_size=5, padding=2),
                     nn.ReLU(),
@@ -127,7 +142,7 @@ def _make_actor_critic() -> type:
             else:
                 self.trunk = nn.Sequential(
                     nn.Flatten(),
-                    nn.Linear(n_channels * N_CHANNEL_FEATURES, hidden),
+                    nn.Linear(n_channels * n_features, hidden),
                     nn.ReLU(),
                     nn.Linear(hidden, hidden),
                     nn.ReLU(),
@@ -148,7 +163,7 @@ def _make_actor_critic() -> type:
             Returns:
                 Logits of shape ``(N, B)`` and values of shape ``(N,)``.
             """
-            chan, glob = _split_obs(flat, self.n_channels)
+            chan, glob = _split_obs(flat, self.n_channels, self.n_features)
             if self.encoder_kind == "conv1d":
                 feat = self.trunk(chan)  # (N, width, B)
                 logits = self.action_head(feat).squeeze(1)  # (N, B)
@@ -277,6 +292,7 @@ def train_ppo(
     verbose: bool = True,
     checkpoint_path: Path | None = None,
     checkpoint_every: int = 20,
+    hybrid: bool = False,
 ) -> tuple[Any, TrainLog]:
     """Train the PPO scheduler.
 
@@ -294,9 +310,14 @@ def train_ppo(
         verbose: Print progress.
         checkpoint_path: Write a mid-training checkpoint here; ``None`` disables.
         checkpoint_every: Save every this many updates.
+        hybrid: Train on predictor-augmented observations, for the hybrid agent.
 
     Returns:
         ``(trained network, TrainLog)``.
+
+    Raises:
+        FileNotFoundError: If ``hybrid`` is set but the tier has no trained
+            predictor to augment with.
     """
     torch = _setup_torch(config)
     from smartscan.env.gym_env import SmartScanEnv
@@ -306,11 +327,40 @@ def train_ppo(
     n_envs = int(n_envs or config.rl.n_envs)
     train_seeds = list(seeds or range(config.run.seed + 1000, config.run.seed + 1000 + 16))
 
-    envs = [SmartScanEnv(config, train_seeds, rng_seed=config.run.seed + i) for i in range(n_envs)]
+    # For the hybrid, every env needs its OWN predictor: predict() reads a
+    # per-instance rolling window, so sharing one across parallel envs would
+    # interleave eight episodes' histories into a single buffer.
+    n_features = N_CHANNEL_FEATURES
+    adapters: list[Any] = []
+    if hybrid:
+        from smartscan.agents.hybrid import HYBRID_CHANNEL_FEATURES, HybridObservationAdapter
+        from smartscan.agents.predictors import SequencePredictorScheduler
+
+        n_features = HYBRID_CHANNEL_FEATURES
+        for i in range(n_envs):
+            pred = SequencePredictorScheduler(config, config.run.seed + i)
+            if pred._fallback is not None:
+                raise FileNotFoundError(
+                    f"hybrid training needs a trained predictor for tier "
+                    f"{config.scenario.difficulty!r}; none was found, and training "
+                    "against an untrained one would teach the policy to read noise. "
+                    "Run `smartscan train --what predictor` for this tier first."
+                )
+            adapters.append(HybridObservationAdapter(config, pred))
+
+    envs = [
+        SmartScanEnv(
+            config, train_seeds, rng_seed=config.run.seed + i,
+            observation_adapter=adapters[i] if hybrid else None,
+        )
+        for i in range(n_envs)
+    ]
     obs = np.stack([e.reset()[0] for e in envs])
     masks = np.stack([e.action_mask() for e in envs])
 
-    net = ActorCritic(config.n_channels, config.rl.hidden_dim, config.rl.encoder)
+    net = ActorCritic(
+        config.n_channels, config.rl.hidden_dim, config.rl.encoder, True, n_features
+    )
     opt = torch.optim.Adam(net.parameters(), lr=ppo.lr)
     log = TrainLog()
 

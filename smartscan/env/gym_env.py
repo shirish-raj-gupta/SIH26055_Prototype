@@ -31,9 +31,18 @@ from smartscan.runner import RewardAccountant
 __all__ = ["SmartScanEnv", "make_gym_env", "observation_size"]
 
 
-def observation_size(config: Config) -> int:
-    """Return the flat observation length ``B * F + G``."""
-    return config.n_channels * N_CHANNEL_FEATURES + N_GLOBAL_FEATURES
+def observation_size(config: Config, n_features: int = N_CHANNEL_FEATURES) -> int:
+    """Return the flat observation length ``B * F + G``.
+
+    Args:
+        config: Resolved configuration.
+        n_features: Per-channel feature count. The hybrid observation adds the
+            predictor's probability plane, so this is not always the default.
+
+    Returns:
+        Length of the flat observation vector.
+    """
+    return config.n_channels * n_features + N_GLOBAL_FEATURES
 
 
 class SmartScanEnv:
@@ -54,15 +63,24 @@ class SmartScanEnv:
         seeds: Sequence[int] | None = None,
         cache_episodes: bool = True,
         rng_seed: int = 0,
+        observation_adapter: Any = None,
     ) -> None:
         self.cfg = config
+        # When set, observations are augmented (the hybrid agent appends the
+        # predictor's per-channel probability). The adapter owns a predictor
+        # whose rolling window this env must drive: predict() reads a buffer
+        # that only observe() fills, and nothing else in the rollout calls it.
+        self.observation_adapter = observation_adapter
         self.seeds = list(seeds or range(config.run.seed, config.run.seed + 16))
         self.cache_episodes = cache_episodes
         self._cache: dict[int, tuple[Scenario, Any]] = {}
         self._rng = np.random.default_rng(rng_seed)
 
         self.n_actions = config.n_channels
-        self.obs_size = observation_size(config)
+        self.obs_size = (
+            observation_adapter.obs_size if observation_adapter is not None
+            else observation_size(config)
+        )
         self.belief: BeliefState | None = None
         self.receiver: Receiver | None = None
         self._accountant: RewardAccountant | None = None
@@ -99,11 +117,17 @@ class SmartScanEnv:
         self._accountant = RewardAccountant(self.cfg, episode)
         self._interferer_channels = {t.home_channel for t in episode.truth if t.is_interferer}
         self._last_action = None
+        if self.observation_adapter is not None:
+            # A stale window from the previous episode would leak across the
+            # reset boundary and be read as this episode's history.
+            self.observation_adapter.predictor.reset()
         return self.observation(), self.info()
 
     def observation(self) -> np.ndarray:
-        """Return the flat float32 belief feature vector."""
+        """Return the flat float32 observation, augmented if an adapter is set."""
         assert self.belief is not None
+        if self.observation_adapter is not None:
+            return self.observation_adapter.observation(self.belief)
         return self.belief.flat_features()
 
     def action_mask(self) -> np.ndarray:
@@ -135,6 +159,8 @@ class SmartScanEnv:
         detected_ids = obs_rx.truth_ids[genuine]
 
         self.belief.update(obs_rx)
+        if self.observation_adapter is not None:
+            self.observation_adapter.predictor.observe(obs_rx)
         stale = float(self.belief.time_since_visit.max())
         retuned = self._last_action is None or int(action) != self._last_action
         on_interferer = bool(self._interferer_channels & set(range(lo, hi)))

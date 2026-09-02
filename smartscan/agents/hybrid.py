@@ -119,8 +119,11 @@ class HybridScheduler(Scheduler):
             from smartscan.agents.rl_agents import ActorCritic, _require_torch
 
             self.torch = _require_torch()
+            # Must match the width train_ppo(hybrid=True) built, or the weights
+            # load into a net that cannot accept the observation it is fed.
             self.net = ActorCritic(
                 self.n_channels, self.cfg.rl.hidden_dim, self.cfg.rl.encoder,
+                True, HYBRID_CHANNEL_FEATURES,
             )
             self.net.load_state_dict(
                 self.torch.load(self.rl_path, map_location="cpu", weights_only=True)
