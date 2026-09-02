@@ -70,7 +70,12 @@ def safe_episodes(tier: str) -> int:
     avail = _available_memory_bytes()
     if not avail:
         return MIN_EPISODES
-    return max(MIN_EPISODES, min(MAX_EPISODES, int(0.6 * avail / per_ep)))
+    # 0.8 margin on top of the guard's own 0.6. The count is computed here and
+    # checked moments later inside the child process, and free memory drifts in
+    # between: a run sized at exactly the limit from 5.5 GB was refused when the
+    # child measured 5.2 GB. Leave room for that drift rather than racing it.
+    fits = int(0.6 * avail / per_ep * 0.8)
+    return max(MIN_EPISODES, min(MAX_EPISODES, fits))
 
 
 def done(what: str, tier: str) -> bool:
@@ -101,6 +106,24 @@ def wait_for_memory(need_gb: float, timeout_s: float = 7200) -> bool:
     return False
 
 
+def run_once(what: str, tier: str, extra: tuple[str, ...]) -> int:
+    """Invoke the training CLI once.
+
+    Args:
+        what: Model kind.
+        tier: Config tier.
+        extra: Additional CLI arguments.
+
+    Returns:
+        The process return code.
+    """
+    return subprocess.run(
+        [sys.executable, "-u", "-m", "smartscan.cli", "train",
+         "--what", what, "--config", f"configs/{tier}.yaml", *extra],
+        cwd=REPO,
+    ).returncode
+
+
 def main() -> int:
     """Run the queue."""
     for what, tier in JOBS:
@@ -127,13 +150,21 @@ def main() -> int:
 
         print(f"== {what}_{tier}: starting", flush=True)
         t0 = time.perf_counter()
-        r = subprocess.run(
-            [sys.executable, "-u", "-m", "smartscan.cli", "train",
-             "--what", what, "--config", f"configs/{tier}.yaml", *extra],
-            cwd=REPO,
-        )
+        rc = run_once(what, tier, extra)
+
+        # A predictor refused for memory is worth retrying smaller: the corpus
+        # size is a preference, not a requirement, and a smaller one beats none.
+        while rc != 0 and what == "predictor":
+            current = int(extra[extra.index("--episodes") + 1])
+            nxt = int(current * 0.7)
+            if nxt < MIN_EPISODES:
+                break
+            print(f"== {what}_{tier}: retrying at {nxt} episodes", flush=True)
+            extra = ("--arch", "transformer", "--episodes", str(nxt))
+            rc = run_once(what, tier, extra)
+
         mins = (time.perf_counter() - t0) / 60
-        status = "done" if r.returncode == 0 else f"FAILED rc={r.returncode}"
+        status = "done" if rc == 0 else f"FAILED rc={rc}"
         print(f"== {what}_{tier}: {status} in {mins:.1f} min", flush=True)
 
     print("queue complete", flush=True)
