@@ -22,7 +22,7 @@ huggingface_token*
 # --------------------------------------------------------------------------- #
 runs/
 reports/
-build/
+/build/
 dist/
 *.egg-info/
 wandb/
@@ -50,7 +50,10 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
-env/
+# Anchored to the repo root. Unanchored, `env/` also matches `smartscan/env/`
+# and silently drops the entire RF environment simulator from the repository --
+# which it did: the published package imported but had no `smartscan.env`.
+/env/
 
 # --------------------------------------------------------------------------- #
 # Notebooks and editors
