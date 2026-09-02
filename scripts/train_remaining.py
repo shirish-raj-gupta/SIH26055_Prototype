@@ -32,16 +32,45 @@ sys.path.insert(0, str(REPO))
 
 from smartscan.agents.predictors import _available_memory_bytes  # noqa: E402
 
-#: (what, tier, extra args). Ordered so each tier's predictor precedes its hybrid.
-JOBS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("predictor", "easy", ("--arch", "transformer", "--episodes", "40")),
-    ("hybrid", "easy", ()),
-    ("predictor", "hard", ("--arch", "transformer", "--episodes", "40")),
-    ("hybrid", "hard", ()),
+#: (what, tier). Ordered so each tier's predictor precedes its hybrid.
+JOBS: tuple[tuple[str, str], ...] = (
+    ("predictor", "easy"),
+    ("hybrid", "easy"),
+    ("predictor", "hard"),
+    ("hybrid", "hard"),
 )
 
-#: A predictor corpus needs ~4.2 GB at 40 episodes; leave room to breathe.
-NEED_GB = 5.5
+#: Never build a corpus smaller than this; below it the student has no chance.
+MIN_EPISODES = 12
+
+#: Never more than this, regardless of free memory: past here the returns are
+#: not worth the wall time on CPU.
+MAX_EPISODES = 40
+
+
+def safe_episodes(tier: str) -> int:
+    """Largest corpus that ``build_windows`` will accept right now.
+
+    Sized with the guard's own formula rather than a constant. A fixed 40 was
+    the bug this replaces: the queue waited for 5.5 GB free while the guard
+    requires ``projected <= 0.6 * available``, i.e. 7.0 GB for 40 episodes --
+    unreachable on a box with ~5.4 GB free at rest. Every job failed, and the
+    two hybrids then failed correctly for want of a predictor.
+
+    Args:
+        tier: Config tier, which fixes the channel count and window length.
+
+    Returns:
+        An episode count that will not be refused.
+    """
+    from smartscan.config import load_config
+
+    cfg = load_config(f"{tier}.yaml")
+    per_ep = 400 * 4 * cfg.n_channels * cfg.predictor.window_slots * 4
+    avail = _available_memory_bytes()
+    if not avail:
+        return MIN_EPISODES
+    return max(MIN_EPISODES, min(MAX_EPISODES, int(0.6 * avail / per_ep)))
 
 
 def done(what: str, tier: str) -> bool:
@@ -74,13 +103,27 @@ def wait_for_memory(need_gb: float, timeout_s: float = 7200) -> bool:
 
 def main() -> int:
     """Run the queue."""
-    for what, tier, extra in JOBS:
+    for what, tier in JOBS:
         if done(what, tier):
             print(f"== {what}_{tier}: already trained, skipping", flush=True)
             continue
-        if what == "predictor" and not wait_for_memory(NEED_GB):
-            print(f"== {what}_{tier}: never got {NEED_GB} GB free; skipping", flush=True)
-            continue
+
+        extra: tuple[str, ...] = ()
+        if what == "predictor":
+            # Wait only for enough to fit the MINIMUM corpus, then size the run
+            # to whatever is actually free. Waiting for a fixed figure the box
+            # never reaches is how the previous version stalled and then failed.
+            from smartscan.config import load_config
+
+            cfg = load_config(f"{tier}.yaml")
+            floor_gb = MIN_EPISODES * 400 * 4 * cfg.n_channels * cfg.predictor.window_slots * 4
+            floor_gb = floor_gb / 0.6 / 1e9
+            if not wait_for_memory(floor_gb):
+                print(f"== {what}_{tier}: never got {floor_gb:.1f} GB free; skipping", flush=True)
+                continue
+            n_ep = safe_episodes(tier)
+            extra = ("--arch", "transformer", "--episodes", str(n_ep))
+            print(f"== {what}_{tier}: {n_ep} episodes fit in memory", flush=True)
 
         print(f"== {what}_{tier}: starting", flush=True)
         t0 = time.perf_counter()
