@@ -211,13 +211,21 @@ def run_benchmark(
         episode = build_episode(scenario)
         out = []
         for key in agent_keys:
+            agent = build_agent(key, config, seed, scenario)
             res = run_episode(
-                config, seed, build_agent(key, config, seed, scenario),
-                scenario=scenario, episode=episode,
+                config, seed, agent, scenario=scenario, episode=episode,
             )
             row = evaluate_episode(res, config)
             row.pop("_detail", None)
             row["agent"] = key
+            # Carry the agent's own name, not just its registry key. A learned
+            # scheduler with no checkpoint substitutes an analytic policy and
+            # says so in its name -- "predictor (untrained -> ucb1 fallback)".
+            # Keying the row on `key` alone throws that away, and the
+            # leaderboard then reports UCB1's numbers under the name of a model
+            # that was never trained.
+            row["agent_name"] = agent.name
+            row["fallback"] = "fallback" in agent.name or "->" in agent.name
             out.append(row)
         return out
 
@@ -313,6 +321,12 @@ def leaderboard_markdown(result: BenchmarkResult, metrics: Sequence[str] | None 
             v = [r.get(m, np.nan) for r in result.rows if r["agent"] == a]
             vals.append(f"{np.nanmedian(v):.4g}" if v else "-")
         mark = " **(baseline)**" if a == result.baseline else ""
+        # A row whose agent substituted an analytic policy for missing weights
+        # must not read as a trained model's result.
+        sub = next((r.get("agent_name", "") for r in result.rows
+                    if r["agent"] == a and r.get("fallback")), "")
+        if sub:
+            mark += f" [NOT TRAINED - ran as `{sub}`]"
         lines.append(f"| `{a}`{mark} | " + " | ".join(vals) + " |")
 
     lines += ["", "### Paired improvement vs baseline (95 % bootstrap CI, Holm-corrected)", "",
@@ -324,6 +338,17 @@ def leaderboard_markdown(result: BenchmarkResult, metrics: Sequence[str] | None 
             f"| {100 * c.improvement:+.1f}% | [{100 * c.ci_lo:+.1f}%, {100 * c.ci_hi:+.1f}%] "
             f"| {c.p_holm:.3g} | {c.effect_size:+.2f} | {'yes' if c.significant else 'no'} |"
         )
+
+    fell_back = sorted({r["agent"] for r in result.rows if r.get("fallback")})
+    if fell_back:
+        names = ", ".join(f"`{a}`" for a in fell_back)
+        lines += [
+            "",
+            f"> **{len(fell_back)} agent(s) had no trained weights and ran as a "
+            f"substitute policy: {names}.** Those rows measure the substitute, "
+            "not the model named. Train them, or read them as duplicates of the "
+            "policy they fell back to.",
+        ]
     return "\n".join(lines)
 
 
