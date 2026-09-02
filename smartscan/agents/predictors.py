@@ -457,7 +457,7 @@ def train_predictor(
                     opt_t.zero_grad()
                     loss.backward()
                     opt_t.step()
-                    tot += float(loss)
+                    tot += float(loss.detach())
                     n += 1
                 if verbose:
                     print(f"  teacher epoch {ep + 1}/{pc.distillation.teacher_epochs} loss={tot / max(n, 1):.4f}", flush=True)
@@ -486,7 +486,7 @@ def train_predictor(
             opt.zero_grad()
             loss.backward()
             opt.step()
-            tot += float(loss)
+            tot += float(loss.detach())
             n += 1
 
         student.eval()

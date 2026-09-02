@@ -524,7 +524,20 @@ class DistillationConfig(_Base):
 
 
 class PredictorConfig(_Base):
-    """Supervised next-slot occupancy predictor."""
+    """Supervised next-slot occupancy predictor.
+
+    **Architecture cost is not a detail on CPU.** Measured on MEDIUM, batch 64,
+    4 threads, one optimiser step: ``gru`` 7.8 s, ``tcn`` 7.2 s, ``transformer``
+    0.36 s. The recurrent and dilated-convolution stacks fold the 128 channels
+    into the batch and then walk 128 time steps, which does not parallelise;
+    the transformer attends over the time axis in one shot and is ~20x faster
+    despite having *more* parameters. At the shipped budget that is the
+    difference between ~40 minutes and ~13 hours for a single training run.
+
+    So ``transformer`` is the architecture to use on a CPU box, and ``gru`` /
+    ``tcn`` belong on the GPU path (the Kaggle training notebooks). Choose on
+    measured skill, not on the default: ``--arch`` overrides this per run.
+    """
 
     arch: Literal["gru", "tcn", "transformer"] = "gru"
     window_slots: int = Field(default=128, gt=0)

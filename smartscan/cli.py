@@ -215,7 +215,21 @@ def train(
         from smartscan.agents.predictors import train_predictor
 
         if steps:
-            cfg = cfg.with_overrides(predictor={"epochs": steps})
+            # --steps must bound the WHOLE job, not just the student. The
+            # privileged teacher trains first, for its own epoch count, so
+            # leaving it untouched makes `--steps 12` a ~100-minute "smoke run"
+            # on CPU. Cap the teacher by the same budget.
+            cfg = cfg.with_overrides(
+                predictor={
+                    "epochs": steps,
+                    "distillation": {
+                        **cfg.predictor.distillation.model_dump(),
+                        "teacher_epochs": min(
+                            cfg.predictor.distillation.teacher_epochs, steps
+                        ),
+                    },
+                }
+            )
         model, history = train_predictor(cfg, seeds=train_seeds, arch=arch)
         path = ckpt_dir / f"predictor_{tier}.pt"
         torch.save(model.state_dict(), path)

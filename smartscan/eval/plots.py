@@ -452,6 +452,13 @@ def plot_ablation_tornado(
     subtitle says so on the figure, because a chart of flat bars otherwise looks
     like a broken pipeline.
 
+    **Every bar here is a point estimate with no confidence interval**, from the
+    seed count printed in the title -- typically 8, which is a pilot. A 29 %
+    ``coverage_weight`` bar on this chart failed to replicate at 12 paired seeds
+    (see ``scripts/sweep_coverage_weight.py``). Use the tornado to decide *what
+    to test next*, not what to claim; promote a bar to a result only after a
+    paired run at the benchmark's seed count.
+
     Args:
         report_path: JSON written by ``smartscan ablate``.
         path: Output path.
@@ -502,18 +509,39 @@ def plot_ablation_tornado(
     ax.set_yticks(range(len(labels)))
     ax.set_yticklabels(labels, fontsize=8)
     ax.set_xlabel(f"change in {metric} vs baseline (%)")
-    ax.set_title(f"Ablation sensitivity — {agent}, {metric} (baseline {base:.4g})")
+    n_seeds = report.get("n_seeds")
+    seed_note = f", {n_seeds} seeds" if n_seeds else ""
+    ax.set_title(
+        f"Ablation sensitivity — {agent}, {metric} (baseline {base:.4g}{seed_note})"
+    )
+    notes: list[str] = []
     n_zero = sum(1 for v in values if abs(v) < 1e-9)
     if n_zero:
-        ax.text(
-            0.5, -0.16,
+        notes.append(
             f"{n_zero} term(s) have no effect: `{agent}` is an analytic policy and does "
-            f"not optimise the reward." + chr(10) + "Only w4_retune and coverage_weight "
-            "reach it; include ppo/dqn to ablate the reward itself.",
-            transform=ax.transAxes, ha="center", va="top", fontsize=7.5, color="0.35",
+            f"not optimise the reward. Only w4_retune and coverage_weight reach it; "
+            "include ppo/dqn to ablate the reward itself."
         )
+    notes.append(
+        "Point estimates, no confidence intervals"
+        + (f" ({n_seeds} seeds)" if n_seeds else "")
+        + " — screening only. Confirm a bar with a paired run before claiming it."
+    )
+    ax.text(
+        0.5, -0.16, chr(10).join(notes),
+        transform=ax.transAxes, ha="center", va="top", fontsize=7.5, color="0.35",
+    )
     ax.grid(alpha=0.3, axis="x")
+
+    # Widen the axis before annotating: a value label drawn just past the end of
+    # the longest bar lands on top of the y-tick labels otherwise.
+    span = max(max(values, default=0.0), 0.0) - min(min(values, default=0.0), 0.0)
+    pad = max(0.14 * span, 1.0)
+    lo, hi = ax.get_xlim()
+    ax.set_xlim(min(lo, min(values, default=0.0) - pad),
+                max(hi, max(values, default=0.0) + pad))
+    offset = 0.02 * (ax.get_xlim()[1] - ax.get_xlim()[0])
     for i, v in enumerate(values):
-        ax.text(v + (1.5 if v >= 0 else -1.5), i, f"{v:+.0f}%",
+        ax.text(v + (offset if v >= 0 else -offset), i, f"{v:+.0f}%",
                 va="center", ha="left" if v >= 0 else "right", fontsize=7)
     return _save(fig, path)
