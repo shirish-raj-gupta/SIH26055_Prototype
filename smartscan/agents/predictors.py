@@ -149,6 +149,46 @@ class PredictorDataset:
         )
 
 
+def _available_memory_bytes() -> int:
+    """Best-effort free physical memory, or 0 if it cannot be determined.
+
+    Deliberately dependency-free: psutil is not a requirement of this project
+    and a training guard is not worth adding one for.
+
+    Returns:
+        Free bytes, or 0 when unknown (in which case callers must not guess).
+    """
+    try:  # Linux / macOS
+        import os
+
+        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except (AttributeError, ValueError, OSError):
+        pass
+    try:  # Windows
+        import ctypes
+
+        class _Status(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        st = _Status()
+        st.dwLength = ctypes.sizeof(_Status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+            return int(st.ullAvailPhys)
+    except Exception:  # a guard must never break training
+        pass
+    return 0
+
+
 def build_windows(
     config: Config,
     seeds: Sequence[int],
@@ -176,6 +216,26 @@ def build_windows(
 
     w = config.predictor.window_slots
     b = config.n_channels
+
+    # This builds ONE dense float32 array, so cost is linear in episodes and
+    # there is no streaming path: at 400 windows/episode with 4 planes over a
+    # 128-channel, 128-slot window that is ~105 MB per episode. 128 episodes is
+    # 13.4 GB, which does not fit a 16 GB box -- the run climbs until the OS
+    # kills it or something else on the machine dies first. Say so up front
+    # rather than after twenty minutes of window building.
+    per_episode = max_windows_per_episode * 4 * b * w * 4
+    projected = per_episode * len(list(seeds))
+    available = _available_memory_bytes()
+    if available and projected > 0.6 * available:
+        safe = max(1, int(0.6 * available / max(per_episode, 1)))
+        raise MemoryError(
+            f"build_windows would allocate ~{projected / 1e9:.1f} GB for "
+            f"{len(list(seeds))} episodes ({per_episode / 1e6:.0f} MB each) with only "
+            f"~{available / 1e9:.1f} GB available. Use at most ~{safe} episodes here, "
+            "or train on the GPU notebook, which streams the published corpus "
+            "instead of materialising it."
+        )
+
     xs, ys, ms, yts = [], [], [], []
 
     for seed in seeds:
