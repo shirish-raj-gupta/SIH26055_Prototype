@@ -708,19 +708,41 @@ def train_predictor(
             t_probs = torch.sigmoid(teacher(torch.as_tensor(val.x))).numpy()
         history["teacher_scores_vs_truth"] = prediction_scores(val.y_true, t_probs)
 
-    # A model that never predicts a positive is a constant "idle" detector. On
-    # ~8 % positives it still reports ~0.91 accuracy, so nothing downstream will
-    # notice unless it is said out loud here.
+    # Judge the model the way the scheduler uses it. `act` takes an argmax over
+    # the predicted probabilities -- it RANKS channels and never applies a
+    # threshold -- so "predicts no positives at 0.5" says nothing about whether
+    # the model is usable, and an earlier version of this check wrongly
+    # condemned a model with AP 0.322 against a 0.088 base rate on exactly that
+    # basis. What would break the scheduler is an absence of *ordering*: AUC at
+    # chance, AP at the base rate, or constant output making the argmax
+    # arbitrary.
     scores = history["scores_vs_truth"]
-    history["degenerate"] = scores.get("predicted_positive_rate", 0.0) <= 0.0
+    base = float(scores.get("positive_rate", float("nan")))
+    ap = float(scores.get("average_precision", float("nan")))
+    auc = float(scores.get("auc", float("nan")))
+    lift = ap / base if base > 0 else float("nan")
+    history["ap_lift_over_base_rate"] = lift
+    history["degenerate"] = bool(
+        np.isfinite(auc) and np.isfinite(lift) and (auc < 0.55 or lift < 1.2)
+    )
     if history["degenerate"]:
         warnings.warn(
-            f"predictor predicts NO positives at threshold "
-            f"{scores.get('threshold', 0.5)}: recall {scores.get('recall', 0.0):.3f}, "
-            f"AP {scores.get('average_precision', float('nan')):.3f} against a "
-            f"{scores.get('positive_rate', float('nan')):.3f} base rate. Its "
-            f"{scores.get('accuracy', float('nan')):.3f} accuracy is the base rate, "
-            "not skill. Train on more episodes before using it.",
+            f"predictor does not rank: AUC {auc:.3f}, AP {ap:.3f} against a "
+            f"{base:.3f} base rate ({lift:.2f}x lift). The scheduler picks by "
+            "argmax over these scores, so without an ordering it is choosing "
+            "arbitrarily. Train on more episodes before using it.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    elif scores.get("predicted_positive_rate", 0.0) <= 0.0:
+        # Usable, but worth saying: the hard metrics reported at 0.5 are
+        # meaningless for this model, and only the ranking metrics describe it.
+        warnings.warn(
+            f"predictor ranks well (AUC {auc:.3f}, AP {ap:.3f} vs {base:.3f} base "
+            f"rate, {lift:.2f}x) but never crosses threshold 0.5, so precision, "
+            "recall and F1 above are vacuous. This does not affect the scheduler, "
+            "which ranks rather than thresholds; it does mean the probabilities "
+            "are uncalibrated.",
             RuntimeWarning,
             stacklevel=2,
         )
