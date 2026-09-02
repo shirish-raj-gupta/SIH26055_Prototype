@@ -206,7 +206,30 @@ def train(
     # predicting no positives at all.
     train_seeds = list(range(cfg.run.seed + 1000, cfg.run.seed + 1000 + max(episodes, 1)))
 
-    if what in {"ppo", "dqn", "hybrid"}:
+    if what == "hybrid":
+        # Training this as plain PPO does not merely underperform -- it writes a
+        # checkpoint that cannot be loaded back into the agent it is named for.
+        raise typer.BadParameter(chr(10).join([
+            "hybrid training is not implemented, and training it as plain PPO",
+            "produces a checkpoint that crashes at inference.",
+            "",
+            "HybridScheduler feeds the RL net an observation augmented with the",
+            "predictor's per-channel probabilities: B*13 + G = 1669 values on",
+            "MEDIUM, against the 1541 a standard PPO net is built for. Weights",
+            "trained here fail with:",
+            "  RuntimeError: mat1 and mat2 shapes cannot be multiplied",
+            "",
+            "Implementing it needs (a) SmartScanEnv to emit augmented",
+            "observations, (b) one predictor instance per env, stepped through",
+            "observe() so its rolling window is populated -- the PPO rollout",
+            "never calls it -- and (c) ActorCritic built for 13 channel features",
+            "rather than 12.",
+            "",
+            "Until then `hybrid` still EVALUATES: with no weights it defers to",
+            "its predictor parent and labels itself as having done so.",
+        ]))
+
+    if what in {"ppo", "dqn"}:
         from smartscan.agents.rl_agents import train_dqn, train_ppo
 
         trainer = train_ppo if what != "dqn" else train_dqn
