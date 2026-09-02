@@ -366,6 +366,12 @@ def train_ppo(
 
     rollout = ppo.rollout_steps
     n_updates = max(total_steps // (rollout * n_envs), 1)
+
+    # A short tier can finish in fewer updates than log_every, leaving a single
+    # logged point and a learning curve with nothing to draw -- which is what
+    # happened to ppo_easy. Tighten the interval so every run yields ~30 points
+    # regardless of budget; never loosen a caller's explicit choice.
+    log_every = max(1, min(log_every, n_updates // 30 or 1))
     ep_returns = np.zeros(n_envs)
     recent: list[float] = []
 
