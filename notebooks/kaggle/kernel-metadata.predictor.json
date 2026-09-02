@@ -1,0 +1,17 @@
+{
+  "id": "shirishrajgupta/smartscan-train-occupancy-predictor-sih-26055",
+  "title": "SmartScan: Train Occupancy Predictor (SIH 26055)",
+  "code_file": "train_predictor_kaggle.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "shirishrajgupta/ew-smart-scan-rf-environment"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
