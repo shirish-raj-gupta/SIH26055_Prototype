@@ -120,6 +120,27 @@ high-variance statistic, and an eight-seed pilot run gave a confident-looking
 +26.8 % for `ucb1` that did not survive at thirty. The 30-seed requirement in the
 brief exists for exactly this reason, and it earned its place here.
 
+### Retracted: the `coverage_weight` tuning result
+
+A five-seed ablation reported that raising `agents.coverage_weight` from 1.0 to
+2.0 lifted Whittle's TWIR by 29 %. **It does not.** At twelve *paired* seeds
+(`scripts/sweep_coverage_weight.py`, sharing both scenario and detection luck)
+the effect is +14.7 % with a 95 % CI of [−26 %, +58 %], and TWIR then falls away
+above 2.0 — 0.023 at the default, 0.027 at 2.0, 0.019 at 4.0, 0.014 at 8.0. No
+weight beats the default on TWIR at usable confidence for any agent.
+
+What survives is `staleness_max_s`, monotone in the weight and significant from
+4.0 up (Whittle 1.82 s → 1.01 s → 0.61 s) at flat coverage — which is close to
+tautological, since the term penalises staleness. So the knob is an
+interception-versus-worst-case-staleness trade, documented as such, and the
+default stays at 1.0.
+
+The tell was on the F7 figure the whole time: weight **0.5 read +28 %** and
+weight **2.0 read +29 %** — near-identical gains on *both sides* of the default,
+which no monotone effect can produce. F7 now prints its seed count and carries
+"point estimates, no confidence intervals — screening only". Treat a tornado bar
+as a hypothesis to test, never as a result.
+
 ### Other measured results
 
 | Metric | Result |
