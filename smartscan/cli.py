@@ -190,6 +190,11 @@ def train(
     episodes: int = typer.Option(
         16, "--episodes", help="Training episodes (predictor); more is usually better."
     ),
+    windows_per_episode: int = typer.Option(
+        400, "--windows-per-episode",
+        help="Windows per episode (predictor). Memory is linear in this; "
+             "lowering it buys more episodes for the same RAM.",
+    ),
     set_: list[str] = _SET,
 ) -> None:
     """Train a learned scheduler and save its checkpoint."""
@@ -243,7 +248,10 @@ def train(
                     },
                 }
             )
-        model, history = train_predictor(cfg, seeds=train_seeds, arch=arch)
+        model, history = train_predictor(
+            cfg, seeds=train_seeds, arch=arch,
+            max_windows_per_episode=windows_per_episode,
+        )
         path = ckpt_dir / f"predictor_{tier}.pt"
         save_predictor_checkpoint(model, history["arch"], path)
         _write_json(ckpt_dir / f"predictor_{tier}_history.json", history)

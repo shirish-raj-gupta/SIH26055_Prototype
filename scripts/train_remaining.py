@@ -40,42 +40,48 @@ JOBS: tuple[tuple[str, str], ...] = (
     ("hybrid", "hard"),
 )
 
-#: Never build a corpus smaller than this; below it the student has no chance.
+#: Episodes to aim for. Scenario diversity is what the predictor is short of.
 MIN_EPISODES = 12
 
-#: Never more than this, regardless of free memory: past here the returns are
-#: not worth the wall time on CPU.
-MAX_EPISODES = 40
+#: Episodes to aim for. Scenario diversity is what the predictor is short of.
+TARGET_EPISODES = 40
+
+#: Windows drawn per episode, and the floor below which an episode is barely
+#: sampled. Memory is linear in this, and windows within one episode overlap
+#: heavily (stride 16), so it is the right thing to trade away first.
+MAX_WPE = 400
+MIN_WPE = 96
 
 
-def safe_episodes(tier: str) -> int:
-    """Largest corpus that ``build_windows`` will accept right now.
+def plan(tier: str) -> tuple[int, int]:
+    """Choose ``(episodes, windows_per_episode)`` that fit in memory now.
 
-    Sized with the guard's own formula rather than a constant. A fixed 40 was
-    the bug this replaces: the queue waited for 5.5 GB free while the guard
-    requires ``projected <= 0.6 * available``, i.e. 7.0 GB for 40 episodes --
-    unreachable on a box with ~5.4 GB free at rest. Every job failed, and the
-    two hybrids then failed correctly for want of a predictor.
+    Holds the episode count and trades window density, which is the better
+    exchange: 400 windows from one episode overlap at stride 16 and are highly
+    correlated, whereas 40 scenarios at 200 windows cost half the memory of
+    25 at 400 for a comparable window count and far more variety.
 
     Args:
         tier: Config tier, which fixes the channel count and window length.
 
     Returns:
-        An episode count that will not be refused.
+        ``(episodes, windows_per_episode)``.
     """
     from smartscan.config import load_config
 
     cfg = load_config(f"{tier}.yaml")
-    per_ep = 400 * 4 * cfg.n_channels * cfg.predictor.window_slots * 4
+    per_window = 4 * cfg.n_channels * cfg.predictor.window_slots * 4
     avail = _available_memory_bytes()
     if not avail:
-        return MIN_EPISODES
-    # 0.8 margin on top of the guard's own 0.6. The count is computed here and
-    # checked moments later inside the child process, and free memory drifts in
-    # between: a run sized at exactly the limit from 5.5 GB was refused when the
-    # child measured 5.2 GB. Leave room for that drift rather than racing it.
-    fits = int(0.6 * avail / per_ep * 0.8)
-    return max(MIN_EPISODES, min(MAX_EPISODES, fits))
+        return TARGET_EPISODES, MIN_WPE
+    # 0.8 margin over the guard's own 0.6: the count is chosen here and checked
+    # moments later in the child, and free memory drifts in between.
+    budget = 0.6 * avail * 0.8
+    wpe = int(budget / (TARGET_EPISODES * per_window))
+    if wpe >= MIN_WPE:
+        return TARGET_EPISODES, min(MAX_WPE, wpe)
+    # Not even the floor fits: give up episodes rather than sample them thinly.
+    return max(MIN_EPISODES, int(budget / (MIN_WPE * per_window))), MIN_WPE
 
 
 def done(what: str, tier: str) -> bool:
@@ -144,9 +150,12 @@ def main() -> int:
             if not wait_for_memory(floor_gb):
                 print(f"== {what}_{tier}: never got {floor_gb:.1f} GB free; skipping", flush=True)
                 continue
-            n_ep = safe_episodes(tier)
-            extra = ("--arch", "transformer", "--episodes", str(n_ep))
-            print(f"== {what}_{tier}: {n_ep} episodes fit in memory", flush=True)
+            n_ep, wpe = plan(tier)
+            extra = ("--arch", "transformer", "--episodes", str(n_ep),
+                     "--windows-per-episode", str(wpe))
+            gb = n_ep * wpe * 4 * cfg.n_channels * cfg.predictor.window_slots * 4 / 1e9
+            print(f"== {what}_{tier}: {n_ep} episodes x {wpe} windows "
+                  f"(~{gb:.1f} GB)", flush=True)
 
         print(f"== {what}_{tier}: starting", flush=True)
         t0 = time.perf_counter()
@@ -155,12 +164,12 @@ def main() -> int:
         # A predictor refused for memory is worth retrying smaller: the corpus
         # size is a preference, not a requirement, and a smaller one beats none.
         while rc != 0 and what == "predictor":
-            current = int(extra[extra.index("--episodes") + 1])
-            nxt = int(current * 0.7)
-            if nxt < MIN_EPISODES:
+            cur_wpe = int(extra[extra.index("--windows-per-episode") + 1])
+            nxt = int(cur_wpe * 0.7)
+            if nxt < MIN_WPE // 2:
                 break
-            print(f"== {what}_{tier}: retrying at {nxt} episodes", flush=True)
-            extra = ("--arch", "transformer", "--episodes", str(nxt))
+            print(f"== {what}_{tier}: retrying at {nxt} windows/episode", flush=True)
+            extra = (*extra[:-1], str(nxt))
             rc = run_once(what, tier, extra)
 
         mins = (time.perf_counter() - t0) / 60

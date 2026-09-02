@@ -524,6 +524,7 @@ def train_predictor(
     seeds: Sequence[int] | None = None,
     arch: str | None = None,
     verbose: bool = True,
+    max_windows_per_episode: int = 400,
 ) -> tuple[Any, dict[str, Any]]:
     """Train the occupancy predictor, optionally distilling from a teacher.
 
@@ -533,6 +534,10 @@ def train_predictor(
         seeds: Scenario seeds used to build the dataset.
         arch: Override ``config.predictor.arch``.
         verbose: Print per-epoch progress.
+        max_windows_per_episode: Windows drawn from each episode. Memory is
+            linear in this, and windows within one episode overlap heavily
+            (stride 16), so lowering it buys episode diversity at the same
+            cost -- 40 episodes x 200 is more varied than 25 x 400.
 
     Returns:
         ``(student model, history dict)``. When distillation is enabled the
@@ -550,7 +555,9 @@ def train_predictor(
         seeds = list(seeds or range(config.run.seed + 2000, config.run.seed + 2000 + 12))
         if verbose:
             print(f"  building windows from {len(seeds)} episodes...", flush=True)
-        dataset = build_windows(config, seeds)
+        dataset = build_windows(
+            config, seeds, max_windows_per_episode=max_windows_per_episode
+        )
     train, val = dataset.split(0.8)
     if verbose:
         print(f"  train windows={len(train)} val windows={len(val)}", flush=True)
