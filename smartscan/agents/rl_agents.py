@@ -231,6 +231,43 @@ def _setup_torch(config: Config) -> Any:
     return torch
 
 
+def _save_progress(net: Any, log: TrainLog, path: Path | None, steps: int) -> None:
+    """Write a mid-training checkpoint atomically, or do nothing.
+
+    RL runs here are hours long and this box has killed two of them outright.
+    Without periodic saves the whole run is lost: DQN reached step 188,000 of
+    1,000,000 -- returns already climbing out of the exploration trough -- and
+    left nothing behind, because the only ``torch.save`` was after the loop.
+
+    Writes to a temporary file and replaces, so a kill *during* the save cannot
+    leave a truncated checkpoint where a good one used to be.
+
+    Args:
+        net: Policy network to save.
+        log: Training log, written beside the checkpoint.
+        path: Destination; ``None`` disables checkpointing.
+        steps: Environment steps completed, recorded in the sidecar.
+    """
+    if path is None:
+        return
+    import json
+
+    torch = _require_torch()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    torch.save(net.state_dict(), tmp)
+    tmp.replace(path)
+
+    side = path.with_name(f"{path.stem}_progress.json")
+    tmp_side = side.with_suffix(".tmp")
+    payload = dict(log.as_dict())
+    payload["steps_completed"] = steps
+    payload["complete"] = False
+    tmp_side.write_text(json.dumps(payload, indent=2, default=float), encoding="utf-8")
+    tmp_side.replace(side)
+
+
 def train_ppo(
     config: Config,
     seeds: Sequence[int] | None = None,
@@ -238,6 +275,8 @@ def train_ppo(
     n_envs: int | None = None,
     log_every: int = 10,
     verbose: bool = True,
+    checkpoint_path: Path | None = None,
+    checkpoint_every: int = 20,
 ) -> tuple[Any, TrainLog]:
     """Train the PPO scheduler.
 
@@ -253,6 +292,8 @@ def train_ppo(
         n_envs: Parallel environments; defaults to ``config.rl.n_envs``.
         log_every: Log every this many updates.
         verbose: Print progress.
+        checkpoint_path: Write a mid-training checkpoint here; ``None`` disables.
+        checkpoint_every: Save every this many updates.
 
     Returns:
         ``(trained network, TrainLog)``.
@@ -380,6 +421,8 @@ def train_ppo(
                     f"return={mean_ret:.1f} entropy={ent:.3f}",
                     flush=True,
                 )
+        if checkpoint_path is not None and update % checkpoint_every == 0 and update > 0:
+            _save_progress(net, log, checkpoint_path, steps_done)
     return net, log
 
 
@@ -389,6 +432,8 @@ def train_dqn(
     total_steps: int | None = None,
     log_every: int = 2000,
     verbose: bool = True,
+    checkpoint_path: Path | None = None,
+    checkpoint_every: int = 25_000,
 ) -> tuple[Any, TrainLog]:
     """Train the Double-DQN scheduler with a duelling head and masked actions.
 
@@ -398,6 +443,8 @@ def train_dqn(
         total_steps: Environment steps; defaults to ``config.rl.total_steps``.
         log_every: Log every this many environment steps.
         verbose: Print progress.
+        checkpoint_path: Write a mid-training checkpoint here; ``None`` disables.
+        checkpoint_every: Save every this many environment steps.
 
     Returns:
         ``(trained network, TrainLog)``.
@@ -496,6 +543,9 @@ def train_dqn(
             log.entropy.append(float(eps))
             if verbose:
                 print(f"  dqn step {step}/{total_steps} return={mean_ret:.1f} eps={eps:.3f}", flush=True)
+
+        if checkpoint_path is not None and step % checkpoint_every == 0 and step > 0:
+            _save_progress(net, log, checkpoint_path, step)
     return net, log
 
 

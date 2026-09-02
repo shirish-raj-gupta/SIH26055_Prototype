@@ -203,12 +203,17 @@ def train(
         from smartscan.agents.rl_agents import train_dqn, train_ppo
 
         trainer = train_ppo if what != "dqn" else train_dqn
-        net, log = trainer(cfg, train_seeds, total_steps=steps)
+        path = ckpt_dir / f"{what}_{tier}.pt"
+        # Pass the destination in so the trainer checkpoints as it goes. These
+        # runs take hours and have been killed mid-flight; without this the
+        # whole run is lost rather than the last slice of it.
+        net, log = trainer(cfg, train_seeds, total_steps=steps, checkpoint_path=path)
         import torch
 
-        path = ckpt_dir / f"{what}_{tier}.pt"
         torch.save(net.state_dict(), path)
         _write_json(ckpt_dir / f"{what}_{tier}_trainlog.json", log.as_dict())
+        # The progress sidecar only exists to describe a partial run.
+        (ckpt_dir / f"{what}_{tier}_progress.json").unlink(missing_ok=True)
     elif what == "predictor":
         import torch
 
