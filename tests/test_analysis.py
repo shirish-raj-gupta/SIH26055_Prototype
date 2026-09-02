@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -13,6 +15,7 @@ from smartscan.analysis.estimators import (
 )
 from smartscan.analysis.metrics import (
     average_intercept_time_error,
+    average_precision,
     bootstrap_ci,
     clopper_pearson,
     coverage_entropy,
@@ -239,6 +242,49 @@ def test_prediction_scores():
     assert s["accuracy"] == pytest.approx(1.0)
     assert s["f1"] == pytest.approx(1.0)
     assert s["brier"] < 0.05
+
+
+def test_average_precision_matches_hand_computation():
+    """Step-wise AP, no interpolation: mean precision at each positive."""
+    y = np.array([1, 0, 1, 0, 1])
+    p = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+    # positives are ranked 1st, 3rd and 5th -> precision 1/1, 2/3, 3/5
+    assert average_precision(p, y) == pytest.approx((1.0 + 2 / 3 + 3 / 5) / 3)
+    assert np.isnan(average_precision(p, np.zeros(5)))
+
+
+def test_average_precision_exposes_a_collapsed_predictor():
+    """The reason AP is reported: accuracy and AUC both flatter "always idle".
+
+    A predictor that never fires scores ~0.91 accuracy and 0.5 AUC on an
+    8 %-positive problem. AP falls to the base rate, and the two rate fields
+    make the failure unmistakable in a report.
+    """
+    rng = np.random.default_rng(0)
+    y = rng.random((64, 128)) < 0.085
+    idle = np.full(y.shape, 0.01)
+
+    s = prediction_scores(y, idle)
+    assert s["accuracy"] > 0.9, "accuracy flatters a useless model -- that is the point"
+    assert s["auc"] == pytest.approx(0.5)
+    assert s["predicted_positive_rate"] == 0.0
+    assert s["average_precision"] == pytest.approx(s["positive_rate"], abs=0.01)
+
+    perfect = prediction_scores(y, y.astype(float))
+    assert perfect["average_precision"] == pytest.approx(1.0)
+    assert perfect["recall"] == pytest.approx(1.0)
+
+
+def test_prediction_scores_survives_rows_with_no_positives():
+    """Macro-averaging over sparse rows must not emit a warning or return nan."""
+    y = np.zeros((4, 8), dtype=int)
+    y[0, 0] = 1
+    p = np.full((4, 8), 0.9)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any RuntimeWarning fails the test
+        s = prediction_scores(y, p)
+    assert np.isfinite(s["accuracy"])
+    assert np.isfinite(s["recall"])
 
 
 def test_coverage_entropy():

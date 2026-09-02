@@ -234,7 +234,20 @@ def train(
         path = ckpt_dir / f"predictor_{tier}.pt"
         torch.save(model.state_dict(), path)
         _write_json(ckpt_dir / f"predictor_{tier}_history.json", history)
-        typer.echo(f"  scores vs privileged truth: {history['scores_vs_truth']}")
+        def _fmt(scores: dict[str, float]) -> str:
+            return (
+                f"ap={scores['average_precision']:.4f} auc={scores['auc']:.4f} "
+                f"brier={scores['brier']:.4f} "
+                f"pred_pos={scores['predicted_positive_rate']:.4f}"
+            )
+
+        base = history["scores_vs_truth"]["positive_rate"]
+        typer.echo(f"  best epoch {history.get('best_epoch')} "
+                   f"(val {history.get('best_val_loss', float('nan')):.4f})")
+        typer.echo(f"  positive base rate: {base:.4f}  <- AP at this value is no skill")
+        if "teacher_scores_vs_truth" in history:
+            typer.echo(f"  teacher (privileged): {_fmt(history['teacher_scores_vs_truth'])}")
+        typer.echo(f"  student (obs-only)  : {_fmt(history['scores_vs_truth'])}")
     else:
         raise typer.BadParameter(f"unknown --what {what!r}; use ppo, dqn, predictor or hybrid")
 

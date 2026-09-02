@@ -365,10 +365,25 @@ def masked_focal_loss(
 ) -> Any:
     """Focal binary cross-entropy, evaluated only where a label exists.
 
-    ``FL = -alpha * (1 - p_t)**gamma * log(p_t)`` (Lin et al., 2017), averaged
-    over masked entries. Occupancy is a few per cent positive, so unweighted BCE
-    converges to "always idle"; the focal term down-weights the easy negatives
-    that dominate the sum.
+    ``FL = -alpha_t * (1 - p_t)**gamma * log(p_t)`` (Lin et al., 2017), averaged
+    over masked entries. The ``gamma`` term down-weights easy negatives, which
+    dominate a ~5 %-positive label set.
+
+    **``alpha`` is an operating point, not a cure for imbalance.** It weights
+    positives by ``alpha`` and negatives by ``1 - alpha``, so the shipped 0.25
+    weights positives *down* by 3x -- the opposite of what the imbalance would
+    suggest. Measured on the privileged teacher (transformer, 4 epochs, 8
+    episodes), sweeping it moves the threshold and almost nothing else:
+
+        alpha   0.25    0.50    0.75    0.90
+        AUC    0.710   0.732   0.728   0.729
+        recall 0.057   0.300   0.371   0.535
+        prec   0.992   0.927   0.433   0.204
+
+    Ranking quality is flat; only the precision/recall trade moves. That makes
+    ``alpha`` irrelevant to :class:`SequencePredictorScheduler`, which takes an
+    argmax over predicted occupancy and so depends only on the ordering. Tune it
+    if you consume hard decisions; do not expect it to change scheduling.
 
     Args:
         logits: Raw predictions, shape ``(N, B)``.
@@ -540,6 +555,17 @@ def train_predictor(
         probs = torch.sigmoid(student(torch.as_tensor(val.x))).numpy()
     history["scores_vs_truth"] = prediction_scores(val.y_true, probs)
     history["distilled"] = teacher is not None
+
+    # Score the teacher on the same validation split. Without this the student's
+    # number has no scale: a low AP could mean the task is hard, the observation
+    # is too partial, or the training is broken, and only the privileged
+    # upper bound separates them. The gap IS the result of the distillation
+    # experiment, so it is reported rather than inferred.
+    if teacher is not None:
+        with torch.no_grad():
+            t_probs = torch.sigmoid(teacher(torch.as_tensor(val.x))).numpy()
+        history["teacher_scores_vs_truth"] = prediction_scores(val.y_true, t_probs)
+
     return student, history
 
 

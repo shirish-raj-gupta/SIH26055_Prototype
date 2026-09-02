@@ -324,6 +324,36 @@ def roc_auc(scores: np.ndarray, labels: np.ndarray) -> float:
     return float((ranks[y].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
 
 
+def average_precision(scores: np.ndarray, labels: np.ndarray) -> float:
+    """Area under the precision-recall curve (average precision).
+
+    Preferred over :func:`roc_auc` whenever positives are rare. ROC AUC counts
+    true negatives, of which an 8 %-positive problem has an overwhelming supply,
+    so a model can look respectable while never predicting a positive at all.
+    AP ignores true negatives and collapses to the positive base rate for a
+    useless model, which makes "no better than guessing" legible.
+
+    Args:
+        scores: Decision statistic, higher meaning "more likely a signal".
+        labels: Binary ground truth.
+
+    Returns:
+        AP in ``[0, 1]``; ``nan`` if there are no positives.
+    """
+    s = np.asarray(scores, dtype=np.float64).ravel()
+    y = np.asarray(labels).astype(bool).ravel()
+    n_pos = int(y.sum())
+    if n_pos == 0:
+        return float("nan")
+    order = np.argsort(-s, kind="mergesort")
+    y = y[order]
+    tp = np.cumsum(y)
+    precision = tp / np.arange(1, y.size + 1)
+    # Sum of precision at each positive, divided by the positive count: the
+    # standard step-wise AP, with no interpolation.
+    return float(precision[y].sum() / n_pos)
+
+
 def sensitivity_db(config: Config, pd_target: float = 0.9, pfa: float = 1e-3) -> dict[str, float]:
     """**Metric 3.** Minimum SNR at which ``Pd >= pd_target`` at fixed ``Pfa``.
 
@@ -597,10 +627,17 @@ def average_reward(rewards: np.ndarray, gamma: float = 0.99) -> dict[str, float]
 def prediction_scores(
     y_true: np.ndarray, y_prob: np.ndarray, threshold: float = 0.5
 ) -> dict[str, float]:
-    """**Metric 8.** Accuracy, precision, recall, F1 and Brier score.
+    """**Metric 8.** Accuracy, precision, recall, F1, Brier, ROC AUC and AP.
 
     Macro-averaged over channels, because a micro average is dominated by the
     handful of always-busy channels and would hide total failure on the rest.
+
+    **Read ``average_precision`` first.** Occupancy is ~8 % positive, so a model
+    that predicts "idle" everywhere scores ~0.92 accuracy and a respectable ROC
+    AUC while being worthless; AP falls to the base rate instead. The returned
+    ``positive_rate`` and ``predicted_positive_rate`` make that failure visible
+    at a glance, and ``threshold`` records the operating point the hard metrics
+    were taken at -- precision and recall are meaningless without it.
 
     Args:
         y_true: Binary ground truth, shape ``(B, T)`` or ``(N,)``.
@@ -630,13 +667,27 @@ def prediction_scores(
         rec.append(r)
         f1.append(2 * p * r / (p + r) if p and r and np.isfinite(p) and np.isfinite(r) else float("nan"))
 
+    def _mean(values: list[float]) -> float:
+        """Mean over finite entries, without the empty-slice warning."""
+        arr = np.asarray(values, dtype=np.float64)
+        arr = arr[np.isfinite(arr)]
+        return float(arr.mean()) if arr.size else float("nan")
+
+    base_rate = float(yt.mean())
+    pred_rate = float((yp >= threshold).mean())
     return {
-        "accuracy": float(np.nanmean(acc)),
-        "precision": float(np.nanmean(prec)),
-        "recall": float(np.nanmean(rec)),
-        "f1": float(np.nanmean(f1)),
+        "accuracy": _mean(acc),
+        "precision": _mean(prec),
+        "recall": _mean(rec),
+        "f1": _mean(f1),
         "brier": float(np.mean((yp - yt.astype(float)) ** 2)),
         "auc": roc_auc(yp.ravel(), yt.ravel()),
+        "average_precision": average_precision(yp, yt),
+        # Reported so a collapsed model is unmistakable rather than flattering:
+        # predicting nothing gives accuracy ~= 1 - base_rate and ap ~= base_rate.
+        "positive_rate": base_rate,
+        "predicted_positive_rate": pred_rate,
+        "threshold": float(threshold),
     }
 
 
