@@ -88,6 +88,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# Notebook cells write plot styling as `ax.set_title(t); ax.grid(); ax.legend()`
+# so a figure's formatting stays on one line and the analysis stays readable.
+# That idiom is deliberate in a notebook and noise in a module, so it is allowed
+# here and nowhere else. Every other rule still applies to notebooks -- B905,
+# B023 and D103 were all real defects found in them by this config.
+"notebooks/**/*.ipynb" = ["E701", "E702"]
 "tests/*" = ["D", "ARG"]
 "scripts/*" = ["D"]
 "smartscan/hal/soapy_stub.py" = ["ARG002"]  # stub signatures must match the ABC
