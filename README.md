@@ -104,7 +104,12 @@ Paired bootstrap CIs, Wilcoxon signed-rank, Holm-Bonferroni corrected.
 | `whittle` | **+67.3 %** | [+37.7 %, +129.1 %] | 7.7e-05 | +0.91 |
 
 Seven schedulers clear the ≥ 15 % target with confidence intervals **entirely
-above zero** and near-maximal effect sizes. This is the robust result.
+above zero** and near-maximal effect sizes.
+
+**Do not stop reading here.** Ranked by threat-weighted interception ratio
+alone, this table is misleading, and the next section shows why: the
+policies at the top of it are the ones that fail hardest on the emitters
+the brief is actually about.
 
 Three of those rows are new, and only because every learned agent is now
 genuinely trained. In earlier runs `predictor`, `dqn` and `hybrid` had no
@@ -143,9 +148,56 @@ a proxy for the mission, and it is why `epsilon_greedy`'s +305 % should not be
 read as "best scheduler" — it buys interception by dropping coverage from 0.857
 to 0.724.
 
-The honest summary: **no single policy dominates.** `ucb1` holds the band best,
-`epsilon_greedy` and `predictor` intercept most, and the tuned sweep remains
-hard to beat on both at once.
+### The result that actually matters — hard-target interception, censored properly
+
+TWIR counts interceptions. It does not care **which** emitters were intercepted,
+and a policy can raise it by parking on always-on emitters while never finding a
+single scanning radar. Whether that is happening cannot be seen in a mean: an
+emitter that is never intercepted has a time-to-intercept of `+inf`, and the
+paired bootstrap silently drops those rows — scoring each policy only on the
+runs where it succeeded, which flatters the worst performers most.
+
+A **log-rank test** keeps them, as right-censored observations. MEDIUM, 30 seeds,
+146 hard-class (scanning and agile) emitters per policy:
+
+| Scheduler | TWIR | TTFI hazard ratio | p (log-rank) | never intercepted |
+|---|---|---|---|---|
+| `priority_rr` | −7 % | **1.207** | 1.4e-02 | **53** / 146 |
+| `whittle` | **+67 %** | **1.042** | 0.60 | **64** / 146 |
+| `phase_locked` | **+77 %** | **1.028** | 0.73 | **66** / 146 |
+| `sequential` (baseline) | — | 1.000 | — | 68 / 146 |
+| `ucb1` | −9 % | 1.061 | 0.45 | 64 / 146 |
+| `dqn` | +73 % | 0.989 | 0.89 | 70 / 146 |
+| `hybrid` | +119 % | 0.777 | 8.6e-03 | 94 / 146 |
+| `thompson` | +97 % | 0.682 | 1.8e-04 | 102 / 146 |
+| `predictor` | +159 % | 0.536 | 1.7e-08 | 112 / 146 |
+| `epsilon_greedy` | **+305 %** | **0.513** | **1.2e-08** | **115** / 146 |
+
+Hazard ratio > 1 means the policy intercepts faster than the tuned sweep.
+
+**The ranking is close to inverted.** `epsilon_greedy`, the +305 % headline,
+misses **115 of 146** scanning and agile emitters against the sweep's 68, at a
+hazard ratio of 0.513 with p = 1.2e-08. `predictor` and `thompson` do the same
+thing less severely. They are not better schedulers; they are policies that
+found the cheap emitters and abandoned the expensive ones — and the expensive
+ones are the problem statement.
+
+### So what is the result?
+
+**`whittle` and `phase_locked`.** They are the only policies that raise
+threat-weighted interception ratio (+67 %, +77 %, CIs above zero) *without*
+losing hard-target coverage (hazard 1.042 and 1.028, 64 and 66 never
+intercepted against the baseline's 68). They gain on one axis and give up
+nothing on the other.
+
+That is a smaller headline number than +305 %, and it is the one that survives
+scrutiny. `priority_rr` deserves a mention too: the only policy that
+significantly *improves* hard-target interception (hazard 1.207, 53 missed), and
+it does so while losing 7 % of TWIR — the mirror image of the trade above.
+
+The log-rank test was validated before use: 400 null replicates give
+P(p<0.01) = 0.013, P(p<0.05) = 0.068, P(p<0.10) = 0.113, with a near-uniform
+p-distribution.
 
 ### Time to first intercept, scanning and agile emitters — point estimate only
 
@@ -165,21 +217,21 @@ high-variance statistic, and an eight-seed pilot run gave a confident-looking
 +26.8 % for `ucb1` that did not survive at thirty. The 30-seed requirement in the
 brief exists for exactly this reason, and it earned its place here.
 
-**Known weakness, stated plainly.** The paired test drops non-finite pairs, and
-TTFI is `+inf` exactly when an agent never intercepted a hard-class emitter — so
-it discards each agent's failures and scores it only on the runs where it
-succeeded, flattering the worst performers most. On MEDIUM this once left as few
-as **3 of 30 seeds** for some agents while every other metric kept all 30. The
-harness now withholds any comparison with fewer than `MIN_PAIRED_SEEDS = 10`
-finite pairs and reports what it withheld, so an absent row reads as "not
-tested" rather than "tested and did not win".
+**This is why the log-rank test exists.** The paired bootstrap drops non-finite
+pairs, and TTFI is `+inf` exactly when an agent never intercepted a hard-class
+emitter — so it discards each agent's failures and scores it only on the runs
+where it succeeded. On MEDIUM this once left as few as **3 of 30 seeds** for
+some agents while every other metric kept all 30. Two guards now apply:
 
-That stops unsound numbers being published; it does not recover the information
-censoring throws away. The correct fix is a **log-rank test on the Kaplan-Meier
-curves**, which use the never-intercepted observations rather than discarding
-them. The survival curves in F2 already handle censoring properly — the
-comparison does not. This is the weakest piece of methodology in the project and
-is listed under Known limitations.
+* comparisons with fewer than `min_paired_seeds = 10` finite pairs are
+  **withheld and reported as withheld**, so an absent row reads as "not tested"
+  rather than "tested and did not win";
+* hard-target TTFI is judged by **log-rank**, above, which keeps the
+  never-intercepted emitters instead of discarding them.
+
+The bootstrap numbers in this table are kept because the brief asks for the
+point estimate, but **the log-rank table is the one to believe**. They disagree,
+and the disagreement is the finding.
 
 ### Retracted: the `coverage_weight` tuning result
 
@@ -463,12 +515,13 @@ Stated because they are the first things a reviewer should ask about.
    is 2.5 revolutions — two or three arrivals. No estimator recovers 2 % from
    that. `configs/scan_on_scan.yaml` extends the horizon for *estimator
    validation only*; the 10 s tiers are untouched for scheduler benchmarking.
-2. **The TTFI comparison discards censored observations.** It drops `+inf`
-   pairs, which occur exactly when an agent never intercepted a hard-class
-   emitter, so it scores agents only on runs where they succeeded. Comparisons
-   below 10 finite pairs are now withheld and reported as withheld, but the
-   correct fix is a log-rank test on the Kaplan-Meier curves. F2's survival
-   curves already censor correctly; the paired test does not.
+2. **Two TTFI analyses disagree, and only one is trustworthy.** The paired
+   bootstrap discards `+inf` pairs — exactly the emitters never intercepted —
+   and ranks `epsilon_greedy` top. The log-rank test keeps them as censored
+   observations and ranks it last, at a hazard ratio of 0.513 (p = 1.2e-08).
+   The bootstrap figures are retained only because the brief asks for a point
+   estimate; **the log-rank result is the one to cite.** Comparisons below 10
+   finite pairs are additionally withheld and reported as withheld.
 3. **Two learned policies fail by parking.** `ppo` and `hybrid` reach a median
    worst-case staleness of 10.0 s and 9.86 s on MEDIUM — the whole episode —
    leaving part of the band unvisited throughout. Their interception gains are
