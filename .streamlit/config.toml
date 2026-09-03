@@ -1,0 +1,9 @@
+# Streamlit Community Cloud reads this at deploy time.
+[server]
+headless = true
+# The demo holds per-track episode state in st.session_state; a mid-run rerun
+# from a file watcher would reset it while a judge is watching.
+fileWatcherType = "none"
+
+[theme]
+base = "light"

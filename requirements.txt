@@ -1,0 +1,32 @@
+# Streamlit Community Cloud deployment for the live demo (dashboard/app.py).
+#
+# Streamlit Cloud does not read pyproject.toml, so the demo's dependency set is
+# restated here. It is deliberately the `demo` extra plus `ml`, NOT `all`: the
+# dashboard needs the environment, the schedulers and Plotly, and nothing else.
+# Kaggle, ONNX, HuggingFace and the dataset builder are all absent because the
+# demo runs entirely offline and pulling them in would only add failure modes to
+# a build that has no use for them.
+
+# --- CPU-only torch -----------------------------------------------------------
+# The default PyPI wheel drags in ~2 GB of CUDA libraries that a Streamlit Cloud
+# container can neither use nor fit. This index serves the CPU build.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.3
+
+# --- core simulator and schedulers -------------------------------------------
+numpy>=2.0,<3
+scipy>=1.13,<2
+pyyaml>=6.0,<7
+pydantic>=2.7,<3
+typer>=0.12
+rich>=13.0
+joblib>=1.4
+
+# --- the demo itself ----------------------------------------------------------
+streamlit>=1.35
+plotly>=5.20
+
+# --- tables and figures the panels read ---------------------------------------
+pandas>=2.2
+pyarrow>=16.0
+matplotlib>=3.8

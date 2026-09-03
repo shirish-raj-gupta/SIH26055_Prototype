@@ -20,7 +20,19 @@ huggingface_token*
 # --------------------------------------------------------------------------- #
 # Generated artefacts
 # --------------------------------------------------------------------------- #
-runs/
+# Training output. The 12 trained checkpoints are the exception: 5.7 MB total,
+# and the deployed Streamlit demo needs them. Without them every learned
+# scheduler in the dropdown silently substitutes an analytic policy -- the demo
+# stays honest, because the agent renames itself, but a judge clicking
+# "Occupancy predictor" would be shown UCB1.
+runs/*
+!runs/checkpoints/
+runs/checkpoints/*
+!runs/checkpoints/*_history.json
+!runs/checkpoints/*_trainlog.json
+# Never commit a partial run: this sidecar marks a checkpoint as mid-training.
+runs/checkpoints/*_progress.json
+runs/checkpoints/quarantine/
 reports/
 /build/
 dist/
@@ -31,6 +43,9 @@ lightning_logs/
 # Model weights and datasets are large and reproducible from seeds; they are
 # distributed as Kaggle artefacts rather than in git.
 *.pt
+# ...except the shipped checkpoints. This exception sits AFTER the blanket rule
+# because gitignore resolves by LAST match, not by proximity to the runs/ block.
+!runs/checkpoints/*.pt
 *.pth
 *.onnx
 *.npz
