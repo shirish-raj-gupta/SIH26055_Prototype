@@ -315,13 +315,28 @@ def run_benchmark(
     # tested and why, or the absence looks like the agent simply did not win.
     result.withheld = dropped
     if dropped and progress:
-        print(
-            f"  {len(dropped)} comparison(s) withheld: fewer than "
-            f"{MIN_PAIRED_SEEDS} seeds where both agent and baseline were finite",
-            flush=True,
-        )
-        for key, metric, n_ok, n_all in sorted(dropped, key=lambda d: d[2])[:8]:
-            print(f"    {key:<15}{metric:<24}{n_ok}/{n_all} seeds", flush=True)
+        # Two very different reasons live in this list and must not be conflated.
+        # n_ok == 0 means the metric does not exist on this tier at all -- easy
+        # and medium set n_popup = 0, so popup_detect_rate is undefined, and
+        # easy has no hard-class emitters, so ttfi_hard_median_s is too. That is
+        # structural, not statistical, and reads as a bug if reported as a
+        # sample-size problem.
+        absent = sorted({(m) for _k, m, n_ok, _n in dropped if n_ok == 0})
+        censored = [d for d in dropped if d[2] > 0]
+        if absent:
+            print(
+                f"  not applicable on this tier: {', '.join(absent)} "
+                "(undefined for every seed -- no such emitters in this scenario)",
+                flush=True,
+            )
+        if censored:
+            print(
+                f"  {len(censored)} comparison(s) withheld: fewer than "
+                f"{MIN_PAIRED_SEEDS} seeds finite on both sides",
+                flush=True,
+            )
+            for key, metric, n_ok, n_all in sorted(censored, key=lambda d: d[2])[:8]:
+                print(f"    {key:<15}{metric:<24}{n_ok}/{n_all} seeds", flush=True)
     return result
 
 
