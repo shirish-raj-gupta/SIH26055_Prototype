@@ -407,7 +407,10 @@ def main() -> None:
                                 format_func=lambda k: AGENT_LABELS[k])
             right = st.selectbox("B", list(AGENT_LABELS), index=5,
                                  format_func=lambda k: AGENT_LABELS[k])
-            chosen = [left, right]
+            # Dedupe: comparing a scheduler against itself renders two
+            # identical panels, and Streamlit rejects the second because both
+            # would claim the same element key.
+            chosen = [left] if left == right else [left, right]
         else:
             chosen = [st.selectbox("Scheduler", list(AGENT_LABELS), index=5,
                                    format_func=lambda k: AGENT_LABELS[k])]
@@ -429,15 +432,26 @@ def main() -> None:
 
     signature = (tier, int(seed), n_emitters, ibw, settle, tuple(chosen))
     if st.session_state.get("_sig") != signature or reset:
+        # Build FIRST, then commit the signature. The other order poisons the
+        # cache permanently: if construction raises -- as it did the first time
+        # a learned scheduler was selected -- the signature is already stored
+        # while `tracks` keeps its stale value, so every later rerun sees a
+        # matching signature, skips the rebuild, and raises KeyError on an agent
+        # that was never built.
+        built = {k: _new_track(k, cfg, scenario, episode, int(seed)) for k in chosen}
+        st.session_state["tracks"] = built
         st.session_state["_sig"] = signature
-        st.session_state["tracks"] = {
-            k: _new_track(k, cfg, scenario, episode, int(seed)) for k in chosen
-        }
         st.session_state["running"] = False
         st.session_state["injected"] = False
         st.session_state["t0"] = time.time()
 
     tracks: dict[str, Track] = st.session_state["tracks"]
+
+    # Belt and braces: a desynchronised cache should degrade to a rebuild of the
+    # missing entry, not to a traceback in front of an audience.
+    for k in chosen:
+        if k not in tracks:
+            tracks[k] = _new_track(k, cfg, scenario, episode, int(seed))
 
     if play:
         st.session_state["running"] = not st.session_state.get("running", False)
@@ -459,13 +473,13 @@ def main() -> None:
         _advance(track, cfg, n_steps, interferers)
 
     # ---------------- panels ---------------- #
-    for key in chosen:
+    for i, key in enumerate(chosen):
         track = tracks[key]
         col_plot, col_metrics = st.columns([4, 1])
         with col_plot:
             st.plotly_chart(
                 _waterfall(track, cfg, episode, pd_tensor, AGENT_LABELS.get(key, key)),
-                use_container_width=True, key=f"wf_{key}",
+                use_container_width=True, key=f"wf_{i}_{key}",
             )
         with col_metrics:
             _render_gauges(_metrics(track, cfg, episode, pd_tensor))
