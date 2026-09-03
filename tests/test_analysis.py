@@ -342,15 +342,18 @@ def test_sensitivity_is_a_single_number_per_config():
 def _tiny_benchmark(agents=("sequential", "ucb1")):
     """Run a small benchmark, cheap enough for the fast suite.
 
-    Four seeds, not two: ``run_benchmark`` skips any comparison backed by fewer
-    than three paired observations, so a two-seed run produces no comparisons
-    at all and nothing to render.
+    Four seeds, not two, and ``min_paired_seeds`` lowered to match: the default
+    floor of 10 exists so that censored metrics cannot look significant on a
+    few lucky seeds, and it correctly withholds everything at this size. These
+    tests check that the table RENDERS, not that anything is true, so they opt
+    out of the guard explicitly rather than by accident.
     """
     from smartscan.eval.benchmark import run_benchmark
 
     cfg = load_config("easy.yaml").with_overrides(run={"n_seeds": 4})
     return run_benchmark(
-        cfg, agents=list(agents), metrics=["twir_rate", "coverage"], progress=False
+        cfg, agents=list(agents), metrics=["twir_rate", "coverage"], progress=False,
+        min_paired_seeds=3,
     )
 
 

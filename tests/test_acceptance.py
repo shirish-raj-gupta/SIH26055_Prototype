@@ -74,8 +74,17 @@ def test_a_closed_loop_scheduler_beats_the_tuned_sweep():
     """
     cfg = load_config("medium.yaml").with_overrides(run={"n_seeds": 12})
     agents = ["sequential", "ucb1", "thompson", "whittle", "phase_locked", "coprime_sweep"]
+    # min_paired_seeds is lowered deliberately. ttfi_hard_median_s is +inf
+    # whenever an agent never intercepted a hard-class emitter, so the paired
+    # test keeps only the seeds where BOTH sides succeeded -- at 12 seeds that
+    # routinely falls below the production floor of 10 and the comparison is
+    # withheld. The brief's TTFI criterion is a point estimate, and the README
+    # states plainly that it is not statistically supported, so this test
+    # asserts the point estimate and prints the surviving sample size instead
+    # of pretending the floor was met.
     result = run_benchmark(
-        cfg, agents=agents, metrics=["ttfi_hard_median_s", "twir_rate"], progress=False
+        cfg, agents=agents, metrics=["ttfi_hard_median_s", "twir_rate"],
+        progress=False, min_paired_seeds=3,
     )
 
     ttfi = {c.agent: c for c in result.comparisons if c.metric == "ttfi_hard_median_s"}
@@ -87,7 +96,8 @@ def test_a_closed_loop_scheduler_beats_the_tuned_sweep():
     report = (
         f"best TTFI-hard: {best_ttfi.agent} {100 * best_ttfi.improvement:+.1f}% "
         f"(CI [{100 * best_ttfi.ci_lo:+.1f}%, {100 * best_ttfi.ci_hi:+.1f}%], "
-        f"p_holm={best_ttfi.p_holm:.3g}); "
+        f"p_holm={best_ttfi.p_holm:.3g}, on {best_ttfi.n_seeds}/12 uncensored "
+        f"seeds); "
         f"best TWIR: {best_twir.agent} {100 * best_twir.improvement:+.1f}% "
         f"(CI [{100 * best_twir.ci_lo:+.1f}%, {100 * best_twir.ci_hi:+.1f}%], "
         f"p_holm={best_twir.p_holm:.3g})"

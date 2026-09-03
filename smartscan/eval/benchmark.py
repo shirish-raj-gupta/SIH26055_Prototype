@@ -192,6 +192,7 @@ def run_benchmark(
     metrics: Iterable[str] | None = None,
     n_jobs: int = 1,
     progress: bool = True,
+    min_paired_seeds: int = MIN_PAIRED_SEEDS,
 ) -> BenchmarkResult:
     """Run every scheduler over every seed and compute paired statistics.
 
@@ -278,7 +279,7 @@ def run_benchmark(
             # high: this project has already retracted two findings that came
             # from small samples, and a 3-seed comparison is not evidence.
             n_ok = int(ok.sum())
-            if n_ok < MIN_PAIRED_SEEDS:
+            if n_ok < min_paired_seeds:
                 dropped.append((key, metric, n_ok, len(cand)))
                 continue
             a, b = cand[ok], base[ok]
@@ -332,7 +333,7 @@ def run_benchmark(
         if censored:
             print(
                 f"  {len(censored)} comparison(s) withheld: fewer than "
-                f"{MIN_PAIRED_SEEDS} seeds finite on both sides",
+                f"{min_paired_seeds} seeds finite on both sides",
                 flush=True,
             )
             for key, metric, n_ok, n_all in sorted(censored, key=lambda d: d[2])[:8]:
