@@ -557,12 +557,24 @@ Stated because they are the first things a reviewer should ask about.
    leaving part of the band unvisited throughout. Their interception gains are
    bought by abandoning coverage, which is a failure of the reward function as
    a proxy for the mission rather than a training bug.
-5. **The predictors saw ~5 % of the available data.** Each was trained on ~40
-   episodes regenerated from seeds; the published corpus holds 854 train
-   episodes for MEDIUM alone. `--dataset` now streams the full corpus, but the
-   shipped checkpoints predate it. Note that `predictor_easy` reached AUC 0.911
-   from the *smallest* corpus of the three, so more data is not obviously the
-   limitation.
+5. **The predictors saw ~5 % of the available data — and it does not appear to
+   matter.** Each was trained on ~40 episodes regenerated from seeds; the
+   published corpus holds 854 train episodes for MEDIUM alone.
+
+   That gap was worth testing and was tested. Four independent draws of the same
+   recipe on disjoint episode blocks give AUC 0.685, 0.673, 0.736, 0.644 —
+   **mean 0.684, sd 0.038** — against the shipped 0.683. So the run-to-run
+   spread is ±0.038, and a single-run difference between two predictors has to
+   clear roughly 0.08 before it carries any information. Corpus variations of
+   12,400 vs 16,000 windows sit far inside that. An earlier single run returned
+   0.767 and looked like a 12 % improvement; it is above the maximum of all four
+   repeats, and was an upper-tail draw rather than a better recipe.
+
+   The same measurement identifies the difference that *is* real:
+   `predictor_easy` at 0.911 against MEDIUM's 0.683 is about six standard
+   deviations. **That is tier difficulty, not corpus size** — consistent with
+   easy reaching 0.911 from the smallest corpus of the three. Reproduce with
+   `python scripts/replicate_predictor.py`.
 6. **RL has not been trained to convergence** (§17-B, §21-G).
 7. **Sector-scan period estimates are ambiguous by a factor of 2.** A
    bidirectional sweep genuinely illuminates twice per frame.

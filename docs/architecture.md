@@ -967,3 +967,34 @@ random. **A partial pathology fix, not a performance result.** The consequence
 worth carrying: a hybrid training return is not evidence that the hybrid learned
 anything — 236.0 and 253.8 both describe a policy that tunes to one channel.
 
+### M. The predictor's run-to-run spread retires the corpus-size question
+
+Three Kaggle runs totalling ~40 h were spent trying to establish whether the
+predictors were data-starved: each was trained on ~40 regenerated episodes while
+the published corpus holds 854 for MEDIUM. None produced a model, all three
+stalling in the teacher phase at ~9.5 s per batch with the GPU at 0 %
+utilisation — the loader re-decodes parquet per window, so the run was
+data-bound throughout and more GPU hours would have bought more stalling.
+
+The question was then settled locally, and cheaply, by measuring the noise
+rather than chasing the effect. Four draws of one recipe over disjoint episode
+blocks:
+
+    rep0 0.685   rep1 0.673   rep2 0.736   rep3 0.644
+    mean 0.684   sd 0.038     shipped 0.683
+
+The spread is ±0.038, so a single-run difference must exceed roughly 0.08 to
+mean anything. Every candidate that appeared to beat the shipped model —
+31x400 → 0.767, 97x128 → 0.733, 62x200 → 0.696 — was one draw each and sits
+inside that band; 0.767 is above the maximum of the four repeats and was simply
+an upper-tail draw. Corpus size is not the limitation at this tier.
+
+The same number validates the comparison that matters: `predictor_easy` at 0.911
+against MEDIUM's 0.683 is roughly six standard deviations, so the tiers really
+do differ in difficulty. That is also why easy reached the project's best AUC
+from its *smallest* corpus.
+
+The methodological point, since this is now the third instance: a single run of
+anything in this project is a hypothesis. sd 0.038 is what a run costs to
+believe.
+
