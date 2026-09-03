@@ -47,6 +47,11 @@ __all__ = [
 
 #: Metrics where a *smaller* value is better. Everything else is
 #: higher-is-better, and the sign of the reported improvement is flipped.
+MIN_PAIRED_SEEDS = 10
+#: Below this many finite paired seeds a comparison is withheld rather than
+#: reported: censored metrics can otherwise be 'significant' on a handful of
+#: lucky runs. See run_benchmark.
+
 LOWER_IS_BETTER: frozenset[str] = frozenset(
     {
         "ttfi_median_s", "ttfi_p90_s", "ttfi_mean_s", "ttfi_hard_median_s", "ttfi_hard_p90_s",
@@ -103,6 +108,8 @@ class BenchmarkResult:
         config_hash: Hash of the resolved configuration.
         tier: Tier label.
         baseline: Baseline scheduler key.
+        withheld: ``(agent, metric, n_finite, n_seeds)`` for comparisons not
+            run because too few seeds had finite values on both sides.
     """
 
     rows: list[dict[str, Any]]
@@ -110,6 +117,7 @@ class BenchmarkResult:
     config_hash: str
     tier: str
     baseline: str
+    withheld: list[tuple[str, str, int, int]] | None = None
 
     def per_agent(self, metric: str) -> dict[str, np.ndarray]:
         """Return per-seed values of ``metric``, keyed by agent."""
@@ -245,6 +253,7 @@ def run_benchmark(
 
     # -- paired statistics ------------------------------------------------- #
     raw: list[tuple[str, str, dict[str, Any]]] = []
+    dropped: list[tuple[str, str, int, int]] = []
     for metric in metric_keys:
         per = result.per_agent(metric)
         if baseline not in per:
@@ -256,7 +265,21 @@ def run_benchmark(
                 continue
             cand = per[key]
             ok = np.isfinite(cand) & np.isfinite(base)
-            if ok.sum() < 3:
+
+            # Dropping non-finite seeds is not neutral. ttfi_hard_median_s is
+            # +inf exactly when an agent never intercepted a hard-class emitter,
+            # so discarding those seeds throws away the agent's failures and
+            # scores it only on the runs where it succeeded -- flattering the
+            # worst performers most. On MEDIUM this left as few as 3 of 30 seeds
+            # for some agents while every other metric kept all 30.
+            #
+            # There is no honest paired test on a censored sample this small, so
+            # refuse rather than report one. MIN_PAIRED_SEEDS is deliberately
+            # high: this project has already retracted two findings that came
+            # from small samples, and a 3-seed comparison is not evidence.
+            n_ok = int(ok.sum())
+            if n_ok < MIN_PAIRED_SEEDS:
+                dropped.append((key, metric, n_ok, len(cand)))
                 continue
             a, b = cand[ok], base[ok]
             ci = paired_bootstrap_delta(
@@ -287,6 +310,18 @@ def run_benchmark(
         Comparison(agent=k, metric=m, p_holm=float(pc), **d)
         for (k, m, d), pc in zip(raw, corrected, strict=True)
     ]
+
+    # A withheld comparison must not read as a passed one. Say what was not
+    # tested and why, or the absence looks like the agent simply did not win.
+    result.withheld = dropped
+    if dropped and progress:
+        print(
+            f"  {len(dropped)} comparison(s) withheld: fewer than "
+            f"{MIN_PAIRED_SEEDS} seeds where both agent and baseline were finite",
+            flush=True,
+        )
+        for key, metric, n_ok, n_all in sorted(dropped, key=lambda d: d[2])[:8]:
+            print(f"    {key:<15}{metric:<24}{n_ok}/{n_all} seeds", flush=True)
     return result
 
 
