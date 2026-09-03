@@ -542,6 +542,103 @@ def _pick_device(torch: Any) -> Any:
 
 
 
+def export_onnx(
+    config: Config,
+    checkpoint: str | Path,
+    path: str | Path,
+    opset: int = 17,
+) -> dict[str, Any]:
+    """Export a trained predictor to ONNX and verify the export against torch.
+
+    This is the artefact that leaves Python. Everything else in this project is
+    a research harness; an ONNX graph is what an embedded ES receiver would
+    actually run, which is why the hardware roadmap treats it as the Phase-2
+    hand-off rather than a nice-to-have.
+
+    Opset 17 is pinned because it is what current ONNX Runtime builds support on
+    ARM without custom operators -- a newer opset can export cleanly here and
+    then refuse to load on the target.
+
+    The export is **verified, not assumed**: the same input goes through torch
+    and through onnxruntime and the outputs are compared. A silently wrong graph
+    is worse than a failed export, because it is discovered on hardware.
+
+    Args:
+        config: Resolved configuration, used to rebuild the network.
+        checkpoint: Trained weights, in either checkpoint format.
+        path: Destination ``.onnx`` file.
+        opset: ONNX opset version.
+
+    Returns:
+        Dict with the architecture, file size, and the max absolute
+        torch-vs-onnxruntime discrepancy.
+
+    Raises:
+        RuntimeError: If onnxruntime disagrees with torch by more than 1e-4,
+            or if the graph fails ONNX's own checker.
+    """
+    torch = _require_torch()
+    model = load_predictor_checkpoint(config, checkpoint, torch).cpu().eval()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    dummy = torch.zeros(
+        1, config.predictor.input_planes, config.n_channels, config.predictor.window_slots
+    )
+    torch.onnx.export(
+        model, dummy, str(path), opset_version=opset,
+        input_names=["observation_window"], output_names=["occupancy_logits"],
+        dynamic_axes={"observation_window": {0: "batch"}, "occupancy_logits": {0: "batch"}},
+    )
+
+    import numpy as np
+    import onnx
+    import onnxruntime as ort
+
+    # torch's exporter externalises the weights into a sidecar `.onnx.data`.
+    # Two files that must travel together is a poor artefact to hand to an
+    # embedded team, so fold them back into one self-contained graph.
+    loaded = onnx.load(str(path))
+    onnx.save(loaded, str(path), save_as_external_data=False)
+    sidecar = path.with_suffix(path.suffix + ".data")
+    if sidecar.is_file():
+        sidecar.unlink()
+
+    onnx.checker.check_model(onnx.load(str(path)))
+    sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    # A fixed pseudo-random probe, not zeros: an all-zero input can agree by
+    # accident on a graph that has mangled a non-linearity.
+    probe = np.asarray(
+        np.random.default_rng(config.run.seed).standard_normal(tuple(dummy.shape)),
+        dtype=np.float32,
+    )
+    onnx_out = sess.run(None, {"observation_window": probe})[0]
+    with torch.no_grad():
+        torch_out = model(torch.as_tensor(probe)).numpy()
+    delta = float(np.max(np.abs(onnx_out - torch_out)))
+    if delta > 1e-4:
+        raise RuntimeError(
+            f"ONNX export disagrees with torch by {delta:.3g} (limit 1e-4). "
+            "The graph is wrong; shipping it would move the failure to hardware."
+        )
+
+    blob = torch.load(Path(checkpoint), map_location="cpu", weights_only=True)
+    arch = blob.get("arch") if isinstance(blob, dict) else None
+    written_opset = {i.domain or "ai.onnx": i.version for i in onnx.load(str(path)).opset_import}
+    return {
+        "arch": arch or config.predictor.arch,
+        # The opset ACTUALLY written, not the one requested: torch may silently
+        # fall back to a newer one when it has no implementation for the target,
+        # and a graph that claims 17 while being 18 fails on the device, not here.
+        "opset": written_opset.get("ai.onnx", opset),
+        "opset_requested": opset,
+        "path": str(path),
+        "size_kb": round(path.stat().st_size / 1024, 1),
+        "max_abs_diff_vs_torch": delta,
+        "input_shape": list(dummy.shape),
+    }
+
+
 def _save_predictor_progress(
     state: Any, arch: str, path: str | Path | None, meta: dict[str, Any]
 ) -> None:

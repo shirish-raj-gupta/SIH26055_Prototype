@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 import typer
 
-from smartscan.config import Config, load_config
+from smartscan.config import Config, checkpoint_dir, load_config
 
 app = typer.Typer(add_completion=False, help="Smart Scan Strategy for Electronic Warfare (SIH 26055)")
 
@@ -366,6 +366,34 @@ def ablate(
     report = run_ablations(cfg, which=which, n_seeds=n_seeds)
     _write_json(Path(out), report)
     typer.secho(f"wrote {out}", fg=typer.colors.GREEN)
+
+
+@app.command("export-onnx")
+def export_onnx_cmd(
+    config: str = _CONFIG,
+    checkpoint: str | None = typer.Option(None, help="Defaults to the tier's predictor."),
+    out: str | None = typer.Option(None, help="Destination .onnx path."),
+    opset: int = typer.Option(17, help="ONNX opset. 17 is what ARM ONNX Runtime supports."),
+) -> None:
+    """Export the trained predictor to ONNX, verifying it against torch."""
+    from smartscan.agents.predictors import export_onnx
+
+    cfg = _resolve(config, None)
+    tier = cfg.scenario.difficulty
+    ckpt = Path(checkpoint) if checkpoint else checkpoint_dir(cfg) / f"predictor_{tier}.pt"
+    if not ckpt.is_file():
+        raise typer.BadParameter(
+            f"no predictor checkpoint at {ckpt}. Train one first: "
+            f"smartscan train --what predictor --config configs/{tier}.yaml"
+        )
+    dest = Path(out) if out else Path(cfg.run.out_dir) / "onnx" / f"predictor_{tier}.onnx"
+    info = export_onnx(cfg, ckpt, dest, opset=opset)
+    typer.echo(f"  arch      {info['arch']}")
+    typer.echo(f"  opset     {info['opset']}")
+    typer.echo(f"  input     {info['input_shape']}")
+    typer.echo(f"  size      {info['size_kb']} KB")
+    typer.echo(f"  verified  max |onnx - torch| = {info['max_abs_diff_vs_torch']:.3g}")
+    typer.secho(f"wrote {info['path']}", fg=typer.colors.GREEN)
 
 
 @app.command()
