@@ -476,6 +476,14 @@ Predictor output `p̂ ∈ [0,1]^B` is appended as a 13th feature plane to the RL
 (predictor frozen; no gradient flows back). Reported honestly: the hybrid must beat **both**
 parents on the same seeds, or we say that it did not.
 
+**It did not.** On MEDIUM it reaches +119 % TWIR against the tuned sweep, above
+`ppo` (−41 %) but below `predictor` (+159 %), so it does not beat both parents even
+on the metric that flatters it — and the log-rank puts its hard-target hazard at
+0.777 (p = 8.6e-03), significantly *worse* than the sweep. On EASY and HARD it does
+not schedule at all: under the greedy argmax it tunes to one channel for the whole
+episode. See §21-L for the diagnosis and for why its training return is not
+evidence to the contrary.
+
 ---
 
 ## 12. Scan-on-scan analysis
@@ -622,6 +630,24 @@ differencing removes scenario variance and is what makes a 25 % claim defensible
 | **Discovery curve** | unique emitters found vs `t`, and its area |
 | **FA burden** | declared hits carrying `pfa_flag` ÷ total declared hits |
 | **Period error** | `|T̂e − Te| / Te`; plus **average intercept time error** (§12.2) |
+
+**TTFI is compared by log-rank, not by the paired bootstrap.** A never-intercepted
+emitter has a time to first intercept of `+inf`, and the bootstrap drops non-finite
+pairs — which removes each policy's *failures* and scores it only on the runs where
+it succeeded, flattering the worst performers most. On MEDIUM that once left 3 of
+30 seeds for some agents while every other metric kept all 30. Two guards now apply:
+
+* a comparison backed by fewer than `min_paired_seeds = 10` finite pairs is
+  **withheld and recorded as withheld**, so an absent row reads as "not tested"
+  rather than "tested and did not win";
+* hard-class TTFI is judged by a Mantel-Haenszel **log-rank test**, which keeps the
+  never-intercepted as right-censored observations contributing to the risk set.
+
+The test is calibrated before use: 400 null replicates give P(p<0.01)=0.013,
+P(p<0.05)=0.068, P(p<0.10)=0.113 with a near-uniform p-distribution, and the
+degenerate case — neither policy ever intercepts — returns p=1.0 rather than
+raising. Censoring is reported **per group**, because a policy censoring more than
+the baseline is itself the signal.
 
 Emitted as `metrics.json` (schema-versioned), a markdown table, and Plotly figures.
 
@@ -867,3 +893,73 @@ abandon the band. The headline claim therefore rests on
 the restless-bandit and scan-on-scan policies, both of which are adaptive
 closed-loop schedulers in the PS's sense and neither of which is the open-loop
 strawman. The RL result is reported as measured.
+
+### J. The censored analysis inverted the leaderboard
+
+Ranked by threat-weighted interception ratio, `epsilon_greedy` leads at +305 %
+over the tuned sweep and `predictor` follows at +159 %. Both figures are real and
+survive Holm correction at 30 seeds.
+
+Both are also misleading. TWIR counts interceptions without asking *which* emitter
+was intercepted, so a policy can inflate it by concentrating on always-on emitters
+and never finding a scanning radar — and that failure is invisible to a mean,
+because the emitters it fails on contribute `+inf` and get dropped. The log-rank
+test keeps them:
+
+| agent | TWIR | hazard | p | never intercepted |
+|---|---|---|---|---|
+| `priority_rr` | −7 % | **1.207** | 1.4e-02 | **53** / 146 |
+| `whittle` | +67 % | 1.042 | 0.60 | 64 / 146 |
+| `phase_locked` | +77 % | 1.028 | 0.73 | 66 / 146 |
+| `sequential` | baseline | 1.000 | — | 68 / 146 |
+| `hybrid` | +119 % | 0.777 | 8.6e-03 | 94 / 146 |
+| `thompson` | +97 % | 0.682 | 1.8e-04 | 102 / 146 |
+| `predictor` | +159 % | 0.536 | 1.7e-08 | 112 / 146 |
+| `epsilon_greedy` | **+305 %** | **0.513** | **1.2e-08** | **115** / 146 |
+
+The ordering is close to inverted. `epsilon_greedy` misses 115 of 146 scanning and
+agile emitters against the sweep's 68. The result therefore rests on `whittle` and
+`phase_locked` — the only policies that raise interception ratio while leaving
+hard-target hazard within noise of 1.0 — which is where §17 Risk B predicted it
+would land, though not for the reason given there.
+
+### K. `coverage_weight` was tuned against the wrong objective, twice
+
+The first sweep reported +29 % TWIR for Whittle at a weight of 2.0 on five seeds.
+It did not replicate at twelve (+14.7 %, CI [−26 %, +58 %]) and was retracted.
+
+The retraction fixed the sample size but not the objective: TWIR is the quantity
+§21-J shows to be misleading. Re-swept against hard-target hazard on 20 paired
+seeds, the shipped default is the peak for both policies —
+
+    whittle       0.0 → 0.828   0.5 → 0.879   **1.0 → 0.981**   2.0 → 0.919   8.0 → 0.891
+    phase_locked  0.0 → 0.828   0.5 → 0.905   **1.0 → 0.972**   2.0 → 0.887   8.0 → 0.891
+
+— and falls away on either side, with no cell significant. The knob stays at 1.0.
+Recorded because a sweep can be repeated with a better sample size and still be
+asking the wrong question.
+
+### L. The hybrid does not learn, and its training return conceals it
+
+Under the greedy argmax used at evaluation, `hybrid_easy` and `hybrid_hard` each
+tune to a **single channel** for all 9 998 slots — coverage 0.000, TWIR 0.0000 on
+EASY — while reporting training returns of 62.4 and 236.0. Only `hybrid_medium`
+behaves. It is not a budget problem: `hybrid_hard` had 3 000 000 steps.
+
+Ruled out before reaching for hyperparameters: the inference path (`observe`
+forwards to the predictor's window, `reset` resets it); a layout mismatch
+(`flat_features` and the adapter are both channel-major and `_split_obs` matches);
+an ordering skew (both paths hold dwells `0..t` when acting at `t+1`); the
+predictor itself (varies across channels, std 0.029, observation max |x| 1.59);
+and any shared cause (`predictor`, `dqn`, `ppo`, `ucb1` all spread over 38–125
+channels on every tier).
+
+What remains is that the policy never forms a stable preference ordering: entropy
+falls to 0.362 mid-run and recovers to near-uniform, so the argmax is decided by a
+vanishing margin that lands on the same channel every time. `rl.hybrid.entropy_coef`
+— separate from `rl.ppo.entropy_coef`, because plain PPO trains fine at 0.01 —
+removes the collapse but yields a near-uniform policy that behaves close to
+randomly. **A pathology fix, not a performance result.** The consequence worth
+carrying: a hybrid training return is not evidence that the hybrid learned
+anything.
+
