@@ -95,12 +95,57 @@ Paired bootstrap CIs, Wilcoxon signed-rank, Holm-Bonferroni corrected.
 
 | Scheduler | vs tuned sweep | 95 % CI | p (Holm) | effect size |
 |---|---|---|---|---|
-| `thompson` | **+96.6 %** | [+36.5 %, +237.5 %] | 1.1e-05 | +0.94 |
-| `phase_locked` | **+76.5 %** | [+38.0 %, +145.2 %] | 1.1e-04 | +0.89 |
-| `whittle` | **+67.3 %** | [+37.7 %, +129.1 %] | 5.6e-05 | +0.91 |
+| `epsilon_greedy` | **+305.0 %** | [+209.7 %, +465.6 %] | 1.9e-07 | +1.00 |
+| `predictor` | **+159.3 %** | [+75.3 %, +347.4 %] | 2.4e-05 | +0.94 |
+| `hybrid` | **+118.6 %** | [+58.9 %, +199.4 %] | 2.9e-04 | +0.87 |
+| `thompson` | **+96.6 %** | [+36.5 %, +237.5 %] | 1.6e-05 | +0.94 |
+| `phase_locked` | **+76.5 %** | [+38.0 %, +145.2 %] | 1.5e-04 | +0.89 |
+| `dqn` | **+73.2 %** | [+35.0 %, +145.3 %] | 2.2e-04 | +0.88 |
+| `whittle` | **+67.3 %** | [+37.7 %, +129.1 %] | 7.7e-05 | +0.91 |
 
-Three closed-loop schedulers clear the ≥ 15 % target with confidence intervals
-**entirely above zero** and near-maximal effect sizes. This is the robust result.
+Seven schedulers clear the ≥ 15 % target with confidence intervals **entirely
+above zero** and near-maximal effect sizes. This is the robust result.
+
+Three of those rows are new, and only because every learned agent is now
+genuinely trained. In earlier runs `predictor`, `dqn` and `hybrid` had no
+checkpoint and silently substituted an analytic policy — the leaderboard
+reported UCB1's numbers under their names. The benchmark now records each
+agent's own name and flags any substitution, so a row means what it says.
+
+**And the same table contains three significant regressions**, which belong
+here rather than in a footnote:
+
+| Scheduler | vs tuned sweep | 95 % CI | p (Holm) |
+|---|---|---|---|
+| `coprime_sweep` | **−38.7 %** | [−45.5 %, −33.2 %] | 2.2e-04 |
+| `ppo` | **−41.3 %** | [−54.9 %, −29.7 %] | 4.9e-03 |
+| `random` | **−43.0 %** | [−49.9 %, −32.7 %] | 1.9e-07 |
+
+### What the interception gains cost — read this beside the table above
+
+Interception ratio is not free, and the agents that win on it lose elsewhere.
+Worst-case staleness, MEDIUM, median over 30 seeds:
+
+| Scheduler | max staleness | band coverage |
+|---|---|---|
+| `ucb1` | **0.246 s** | 0.857 |
+| `sequential` (baseline) | 0.623 s | 0.857 |
+| `predictor` | 1.170 s | 0.714 |
+| `epsilon_greedy` | 2.369 s | 0.724 |
+| `dqn` | 2.546 s | 0.800 |
+| `hybrid` | 9.861 s | 0.733 |
+| `ppo` | **10.000 s** | 0.829 |
+
+`ppo` and `hybrid` leave part of the band unvisited for **the entire 10-second
+episode**. They are not scheduling; they have learned to park on the emitters
+that pay and abandon the rest. That is a real failure of the reward function as
+a proxy for the mission, and it is why `epsilon_greedy`'s +305 % should not be
+read as "best scheduler" — it buys interception by dropping coverage from 0.857
+to 0.724.
+
+The honest summary: **no single policy dominates.** `ucb1` holds the band best,
+`epsilon_greedy` and `predictor` intercept most, and the tuned sweep remains
+hard to beat on both at once.
 
 ### Time to first intercept, scanning and agile emitters — point estimate only
 
@@ -119,6 +164,22 @@ emitters per seed, a third of which are never intercepted by anyone. That is a
 high-variance statistic, and an eight-seed pilot run gave a confident-looking
 +26.8 % for `ucb1` that did not survive at thirty. The 30-seed requirement in the
 brief exists for exactly this reason, and it earned its place here.
+
+**Known weakness, stated plainly.** The paired test drops non-finite pairs, and
+TTFI is `+inf` exactly when an agent never intercepted a hard-class emitter — so
+it discards each agent's failures and scores it only on the runs where it
+succeeded, flattering the worst performers most. On MEDIUM this once left as few
+as **3 of 30 seeds** for some agents while every other metric kept all 30. The
+harness now withholds any comparison with fewer than `MIN_PAIRED_SEEDS = 10`
+finite pairs and reports what it withheld, so an absent row reads as "not
+tested" rather than "tested and did not win".
+
+That stops unsound numbers being published; it does not recover the information
+censoring throws away. The correct fix is a **log-rank test on the Kaplan-Meier
+curves**, which use the never-intercepted observations rather than discarding
+them. The survival curves in F2 already handle censoring properly — the
+comparison does not. This is the weakest piece of methodology in the project and
+is listed under Known limitations.
 
 ### Retracted: the `coverage_weight` tuning result
 
@@ -402,12 +463,29 @@ Stated because they are the first things a reviewer should ask about.
    is 2.5 revolutions — two or three arrivals. No estimator recovers 2 % from
    that. `configs/scan_on_scan.yaml` extends the horizon for *estimator
    validation only*; the 10 s tiers are untouched for scheduler benchmarking.
-2. **RL has not been trained to convergence** (§17-B, §21-G).
-3. **Sector-scan period estimates are ambiguous by a factor of 2.** A
+2. **The TTFI comparison discards censored observations.** It drops `+inf`
+   pairs, which occur exactly when an agent never intercepted a hard-class
+   emitter, so it scores agents only on runs where they succeeded. Comparisons
+   below 10 finite pairs are now withheld and reported as withheld, but the
+   correct fix is a log-rank test on the Kaplan-Meier curves. F2's survival
+   curves already censor correctly; the paired test does not.
+3. **Two learned policies fail by parking.** `ppo` and `hybrid` reach a median
+   worst-case staleness of 10.0 s and 9.86 s on MEDIUM — the whole episode —
+   leaving part of the band unvisited throughout. Their interception gains are
+   bought by abandoning coverage, which is a failure of the reward function as
+   a proxy for the mission rather than a training bug.
+4. **The predictors saw ~5 % of the available data.** Each was trained on ~40
+   episodes regenerated from seeds; the published corpus holds 854 train
+   episodes for MEDIUM alone. `--dataset` now streams the full corpus, but the
+   shipped checkpoints predate it. Note that `predictor_easy` reached AUC 0.911
+   from the *smallest* corpus of the three, so more data is not obviously the
+   limitation.
+5. **RL has not been trained to convergence** (§17-B, §21-G).
+6. **Sector-scan period estimates are ambiguous by a factor of 2.** A
    bidirectional sweep genuinely illuminates twice per frame.
-4. **The TTFI half of acceptance test 3 is a point estimate, not a significant
+7. **The TTFI half of acceptance test 3 is a point estimate, not a significant
    result.** See the results section: the CI straddles zero at 30 seeds.
-5. **Sim-to-real gap.** The claim is scheduling-policy quality, not RF realism.
+8. **Sim-to-real gap.** The claim is scheduling-policy quality, not RF realism.
 
 ---
 
