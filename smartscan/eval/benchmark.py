@@ -28,7 +28,11 @@ import numpy as np
 from scipy import stats
 
 from smartscan.agents import build_agent
-from smartscan.analysis.metrics import evaluate_episode, paired_bootstrap_delta
+from smartscan.analysis.metrics import (
+    evaluate_episode,
+    logrank_test,
+    paired_bootstrap_delta,
+)
 from smartscan.config import Config, load_config
 from smartscan.env.rf_environment import build_episode, generate_scenario
 from smartscan.runner import run_episode
@@ -110,6 +114,9 @@ class BenchmarkResult:
         baseline: Baseline scheduler key.
         withheld: ``(agent, metric, n_finite, n_seeds)`` for comparisons not
             run because too few seeds had finite values on both sides.
+        logrank: Per-agent log-rank test of hard-class TTFI against the
+            baseline, pooled over seeds. Unlike the paired bootstrap this keeps
+            never-intercepted emitters as right-censored observations.
     """
 
     rows: list[dict[str, Any]]
@@ -118,6 +125,7 @@ class BenchmarkResult:
     tier: str
     baseline: str
     withheld: list[tuple[str, str, int, int]] | None = None
+    logrank: dict[str, dict[str, float]] | None = None
 
     def per_agent(self, metric: str) -> dict[str, np.ndarray]:
         """Return per-seed values of ``metric``, keyed by agent."""
@@ -204,6 +212,10 @@ def run_benchmark(
         n_jobs: Parallel workers for joblib. ``1`` keeps everything in-process,
             which is what the reproducibility test uses.
         progress: Print a one-line progress note per seed.
+        min_paired_seeds: Withhold any comparison backed by fewer finite paired
+            observations than this. Lower it only for smoke tests that check
+            rendering rather than evidence; the default exists because censored
+            metrics can otherwise look significant on a handful of lucky seeds.
 
     Returns:
         The populated :class:`BenchmarkResult`.
@@ -225,7 +237,16 @@ def run_benchmark(
                 config, seed, agent, scenario=scenario, episode=episode,
             )
             row = evaluate_episode(res, config)
-            row.pop("_detail", None)
+            # Keep the censored per-emitter survival data before dropping the
+            # rest of the detail: the log-rank test below needs the
+            # never-intercepted emitters that ttfi_hard_median_s collapses to
+            # +inf, and they are the observations that matter most.
+            det = row.pop("_detail", None) or {}
+            hard = det.get("ttfi_hard") or {}
+            row["_surv"] = (
+                np.asarray(hard.get("durations_s", []), dtype=np.float64).tolist(),
+                np.asarray(hard.get("observed", []), dtype=bool).tolist(),
+            )
             row["agent"] = key
             # Carry the agent's own name, not just its registry key. A learned
             # scheduler with no checkpoint substitutes an analytic policy and
@@ -250,7 +271,41 @@ def run_benchmark(
             if progress:
                 print(f"  seed {i + 1}/{len(seed_list)} done", flush=True)
 
+    # -- log-rank on TTFI, before the survival data is stripped -------------- #
+    # The paired bootstrap on ttfi_hard_median_s discards +inf, i.e. exactly the
+    # seeds where a policy never intercepted, so it scores each policy only on
+    # its successes. The log-rank keeps those as right-censored observations.
+    surv: dict[str, tuple[list[float], list[bool]]] = {}
+    for r in rows:
+        d, o = r.get("_surv", ([], []))
+        acc = surv.setdefault(r["agent"], ([], []))
+        acc[0].extend(d)
+        acc[1].extend(o)
+    for r in rows:
+        r.pop("_surv", None)
+
+    logrank: dict[str, dict[str, float]] = {}
+    if baseline in surv:
+        bd, bo = surv[baseline]
+        for key, (kd, ko) in surv.items():
+            if key == baseline or not kd:
+                continue
+            lr = logrank_test(np.array(kd), np.array(ko), np.array(bd), np.array(bo))
+            logrank[key] = {
+                "statistic": lr.statistic,
+                "p_value": lr.p_value,
+                "observed": lr.observed_a,
+                "expected": lr.expected_a,
+                "n_emitters": lr.n_a,
+                "never_intercepted": lr.censored_a,
+                "never_intercepted_baseline": lr.censored_b,
+                # >1 means the agent intercepted more than an equal-hazard null
+                # predicts, i.e. it is faster than the baseline.
+                "hazard_ratio": (lr.observed_a / lr.expected_a) if lr.expected_a > 0 else float("nan"),
+            }
+
     result = BenchmarkResult(rows, [], config.hash(), config.scenario.difficulty, baseline)
+    result.logrank = logrank
 
     # -- paired statistics ------------------------------------------------- #
     raw: list[tuple[str, str, dict[str, Any]]] = []

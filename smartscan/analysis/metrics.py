@@ -63,6 +63,7 @@ __all__ = [
     "HARD_CLASSES",
     "METRIC_KEYS",
     "BootstrapCI",
+    "LogRankResult",
     "SurvivalCurve",
     "average_intercept_rate",
     "average_intercept_time_error",
@@ -75,6 +76,7 @@ __all__ = [
     "evaluate_episode",
     "interception_ratio",
     "kaplan_meier",
+    "logrank_test",
     "paired_bootstrap_delta",
     "prediction_scores",
     "roc_auc",
@@ -595,6 +597,103 @@ def time_to_first_intercept(
         "n_emitters": int(d.size),
         "n_never": int((~o).sum()),
     }
+
+
+@dataclass(frozen=True)
+class LogRankResult:
+    """Two-sample log-rank test on right-censored data.
+
+    Attributes:
+        statistic: The chi-squared statistic, 1 degree of freedom.
+        p_value: Two-sided p-value.
+        observed_a: Events observed in group A.
+        expected_a: Events expected in A under the null of equal hazards.
+        n_a: Total observations in A, censored included.
+        n_b: Total observations in B, censored included.
+        censored_a: Never-intercepted emitters in A. Reported per group: a
+            policy censoring *more* than the baseline is failing more often,
+            which is the signal the paired bootstrap discards.
+        censored_b: Never-intercepted emitters in B.
+    """
+
+    statistic: float
+    p_value: float
+    observed_a: float
+    expected_a: float
+    n_a: int
+    n_b: int
+    censored_a: int
+    censored_b: int
+
+
+def logrank_test(
+    durations_a: np.ndarray,
+    observed_a: np.ndarray,
+    durations_b: np.ndarray,
+    observed_b: np.ndarray,
+) -> LogRankResult:
+    """Compare two survival curves without discarding censored observations.
+
+    This exists because the paired bootstrap cannot answer the TTFI question
+    honestly. Time-to-first-intercept is ``+inf`` exactly when an emitter was
+    never intercepted, and dropping those rows removes each policy's failures
+    and scores it only on the runs where it succeeded -- which flatters the
+    worst performers most. The log-rank statistic instead keeps a
+    never-intercepted emitter as a right-censored observation that contributes
+    to the risk set for as long as it was observed, which is the whole point of
+    survival analysis.
+
+    Standard Mantel-Haenszel construction: at each distinct event time, compare
+    events in A against the number expected if both groups shared one hazard,
+    then sum over times and standardise by the hypergeometric variance.
+
+    Args:
+        durations_a: Times for group A, horizon time for censored entries.
+        observed_a: True where the event happened, False where censored.
+        durations_b: Times for group B.
+        observed_b: Event flags for group B.
+
+    Returns:
+        The :class:`LogRankResult`. A degenerate comparison -- no events in
+        either group -- returns ``p_value`` 1.0 rather than raising, because
+        "neither policy ever intercepted anything" is a real outcome here.
+    """
+    da = np.asarray(durations_a, dtype=np.float64)
+    db = np.asarray(durations_b, dtype=np.float64)
+    oa = np.asarray(observed_a, dtype=bool)
+    ob = np.asarray(observed_b, dtype=bool)
+
+    ca, cb = int((~oa).sum()), int((~ob).sum())
+    if da.size == 0 or db.size == 0 or not (oa.any() or ob.any()):
+        return LogRankResult(0.0, 1.0, float(oa.sum()), float(oa.sum()),
+                             int(da.size), int(db.size), ca, cb)
+
+    # Event times only; censoring times affect the risk set, not the sum.
+    times = np.unique(np.concatenate([da[oa], db[ob]]))
+    obs_a = exp_a = var = 0.0
+    for t in times:
+        n1 = float((da >= t).sum())
+        n2 = float((db >= t).sum())
+        n = n1 + n2
+        if n <= 1:
+            continue
+        d1 = float(((da == t) & oa).sum())
+        d2 = float(((db == t) & ob).sum())
+        d = d1 + d2
+        if d == 0:
+            continue
+        obs_a += d1
+        exp_a += d * n1 / n
+        # Hypergeometric variance; zero when every remaining subject fails.
+        var += d * (n1 / n) * (1.0 - n1 / n) * (n - d) / (n - 1.0)
+
+    if var <= 0:
+        return LogRankResult(0.0, 1.0, obs_a, exp_a, int(da.size), int(db.size), ca, cb)
+
+    stat = float((obs_a - exp_a) ** 2 / var)
+    p = float(stats.chi2.sf(stat, df=1))
+    return LogRankResult(stat, p, obs_a, exp_a, int(da.size), int(db.size), ca, cb)
+
 
 
 # --------------------------------------------------------------------------- #
