@@ -33,3 +33,13 @@ predictor:
 eval:
   agents: [sequential, random, priority_rr, ucb1, thompson,
            whittle, coprime_sweep, phase_locked, predictor, dqn, ppo, hybrid]
+
+rl:
+  hybrid:
+    # Recorded for reproducibility, NOT as a fix. Raising this from 0.01 rescued
+    # hybrid_easy (1 -> 49/60/23 distinct channels); on HARD it did not. After
+    # 3,000,000 steps and 2.4 h the policy still tunes to 1-4 channels with
+    # coverage 0.000-0.179, while its training return went UP, 236.0 -> 253.8.
+    # See `Known limitations` in the README: the hybrid does not learn here and
+    # its return is not evidence that it did.
+    entropy_coef: 0.03

@@ -534,6 +534,24 @@ Stated because they are the first things a reviewer should ask about.
    **A hybrid training return is therefore not evidence that it learned
    anything.** `hybrid_medium` (99 distinct channels) is the exception, and it
    is not clear why.
+
+   Attempted fix, reported with its outcome. Raising `rl.hybrid.entropy_coef`
+   from 0.01 to 0.03 — a knob kept separate from `rl.ppo.entropy_coef`, because
+   plain PPO trains fine at 0.01 — **rescued EASY and failed on HARD**:
+
+   | | before | after |
+   |---|---|---|
+   | `hybrid_easy` distinct channels | 1 | 49 / 60 / 23 |
+   | `hybrid_easy` coverage | 0.000 | 1.000 / 1.000 / 0.600 |
+   | `hybrid_hard` distinct channels | 1 | **1 / 4 / 3** |
+   | `hybrid_hard` coverage | 0.000 | **0.000 / 0.179 / 0.069** |
+
+   HARD had 3,000,000 steps and 2.4 h of retraining, and its training return
+   *rose* from 236.0 to 253.8 while the behaviour stayed degenerate — which is
+   the same point again, from the other direction. Even where the fix works,
+   EASY's TWIR is 0.0028 against the sequential baseline's 0.0176: the policy
+   is no longer parked, it is close to random. The hybrid is reported as a
+   negative result.
 4. **Two learned policies fail by parking.** `ppo` and `hybrid` reach a median
    worst-case staleness of 10.0 s and 9.86 s on MEDIUM — the whole episode —
    leaving part of the band unvisited throughout. Their interception gains are

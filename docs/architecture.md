@@ -958,8 +958,12 @@ What remains is that the policy never forms a stable preference ordering: entrop
 falls to 0.362 mid-run and recovers to near-uniform, so the argmax is decided by a
 vanishing margin that lands on the same channel every time. `rl.hybrid.entropy_coef`
 — separate from `rl.ppo.entropy_coef`, because plain PPO trains fine at 0.01 —
-removes the collapse but yields a near-uniform policy that behaves close to
-randomly. **A pathology fix, not a performance result.** The consequence worth
-carrying: a hybrid training return is not evidence that the hybrid learned
-anything.
+removes the collapse **on EASY only**: 1 → 49/60/23 distinct channels, coverage
+0.000 → 1.000/1.000/0.600. On HARD the same change failed — 3 000 000 steps and
+2.4 h later the policy still tunes to 1–4 channels at coverage 0.000–0.179,
+while its training return *rose* from 236.0 to 253.8. And even where it works,
+EASY's TWIR is 0.0028 against the sweep's 0.0176: no longer parked, close to
+random. **A partial pathology fix, not a performance result.** The consequence
+worth carrying: a hybrid training return is not evidence that the hybrid learned
+anything — 236.0 and 253.8 both describe a policy that tunes to one channel.
 
