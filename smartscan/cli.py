@@ -195,6 +195,12 @@ def train(
         help="Windows per episode (predictor). Memory is linear in this; "
              "lowering it buys more episodes for the same RAM.",
     ),
+    dataset: str | None = typer.Option(
+        None, "--dataset",
+        help="Train the predictor by STREAMING the published corpus at this "
+             "path (e.g. build/dataset) instead of regenerating ~40 episodes "
+             "from seeds. Removes the RAM ceiling entirely.",
+    ),
     set_: list[str] = _SET,
 ) -> None:
     """Train a learned scheduler and save its checkpoint."""
@@ -248,9 +254,40 @@ def train(
                     },
                 }
             )
+        loaders = None
+        if dataset:
+            from smartscan.data.kaggle_io import OccupancyWindowDataset, load_dataset
+
+            tr = load_dataset("train", tier=tier, root=dataset, allow_download=False)
+            va = load_dataset("val", tier=tier, root=dataset, allow_download=False)
+            if tr.source == "regenerated":
+                raise typer.BadParameter(
+                    f"no usable corpus at {dataset!r}: it fell back to regenerating "
+                    "from seeds, which is not what --dataset asked for."
+                )
+            typer.echo(f"  corpus: {len(tr)} train / {len(va)} val episodes ({tr.source})")
+            overlap = set(tr.episode_ids()) & set(va.episode_ids())
+            if overlap:
+                raise typer.BadParameter(f"LEAKAGE: {len(overlap)} episodes in both splits")
+            tw = OccupancyWindowDataset(
+                tr, window=cfg.predictor.window_slots, stride=16,
+                agent="sequential", max_windows_per_episode=windows_per_episode,
+                class_balanced=True,
+            )
+            vw = OccupancyWindowDataset(
+                va, window=cfg.predictor.window_slots, stride=64,
+                agent="sequential", max_windows_per_episode=64,
+            )
+            typer.echo(f"  windows: {len(tw)} train / {len(vw)} val (streamed)")
+            loaders = (
+                tw.loader(batch_size=cfg.predictor.batch_size, seed=cfg.run.seed),
+                vw.loader(batch_size=cfg.predictor.batch_size),
+            )
+
         model, history = train_predictor(
             cfg, seeds=train_seeds, arch=arch,
             max_windows_per_episode=windows_per_episode,
+            loaders=loaders,
         )
         path = ckpt_dir / f"predictor_{tier}.pt"
         save_predictor_checkpoint(model, history["arch"], path)

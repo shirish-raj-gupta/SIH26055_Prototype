@@ -525,6 +525,7 @@ def train_predictor(
     arch: str | None = None,
     verbose: bool = True,
     max_windows_per_episode: int = 400,
+    loaders: tuple[Any, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Train the occupancy predictor, optionally distilling from a teacher.
 
@@ -538,6 +539,12 @@ def train_predictor(
             linear in this, and windows within one episode overlap heavily
             (stride 16), so lowering it buys episode diversity at the same
             cost -- 40 episodes x 200 is more varied than 25 x 400.
+        loaders: Optional ``(train_loader, val_loader)`` yielding the same
+            ``(x, y, mask, y_true)`` batches. Supplying these STREAMS the corpus
+            instead of materialising it, which is the only way to train on more
+            episodes than fit in RAM -- ``build_windows`` holds one dense array
+            and caps out around 40 episodes on a 16 GB box, while the published
+            corpus has 854 for MEDIUM alone.
 
     Returns:
         ``(student model, history dict)``. When distillation is enabled the
@@ -551,18 +558,30 @@ def train_predictor(
         torch.set_num_threads(int(config.run.torch_threads))
 
     pc = config.predictor
-    if dataset is None:
-        seeds = list(seeds or range(config.run.seed + 2000, config.run.seed + 2000 + 12))
+    streaming = loaders is not None
+    if streaming:
+        train_loader, val_loader = loaders
+        train = val = None
         if verbose:
-            print(f"  building windows from {len(seeds)} episodes...", flush=True)
-        dataset = build_windows(
-            config, seeds, max_windows_per_episode=max_windows_per_episode
-        )
-    train, val = dataset.split(0.8)
-    if verbose:
-        print(f"  train windows={len(train)} val windows={len(val)}", flush=True)
+            print("  streaming windows from the published corpus", flush=True)
+    else:
+        if dataset is None:
+            seeds = list(seeds or range(config.run.seed + 2000, config.run.seed + 2000 + 12))
+            if verbose:
+                print(f"  building windows from {len(seeds)} episodes...", flush=True)
+            dataset = build_windows(
+                config, seeds, max_windows_per_episode=max_windows_per_episode
+            )
+        train, val = dataset.split(0.8)
+        if verbose:
+            print(f"  train windows={len(train)} val windows={len(val)}", flush=True)
 
-    def batches(ds: PredictorDataset, shuffle: bool = True):
+    def batches(which: str, shuffle: bool = True):
+        """Yield ``(x, y, mask, y_true)`` from either source."""
+        if streaming:
+            yield from (train_loader if which == "train" else val_loader)
+            return
+        ds = train if which == "train" else val
         idx = np.arange(len(ds))
         if shuffle:
             np.random.default_rng(config.run.seed).shuffle(idx)
@@ -585,7 +604,7 @@ def train_predictor(
             for ep in range(pc.distillation.teacher_epochs):
                 teacher.train()
                 tot = n = 0.0
-                for x, _y, _m, yt in batches(train):
+                for x, _y, _m, yt in batches("train"):
                     loss = masked_focal_loss(
                         teacher(x), yt, full.expand_as(yt), pc.focal_gamma, pc.focal_alpha
                     )
@@ -632,7 +651,7 @@ def train_predictor(
     for ep in range(pc.epochs):
         student.train()
         tot = n = 0.0
-        for x, y, m, _yt in batches(train):
+        for x, y, m, _yt in batches("train"):
             logits = student(x)
             loss = masked_focal_loss(logits, y, m, pc.focal_gamma, pc.focal_alpha)
             if teacher is not None and pc.distillation.lambda_kd > 0:
@@ -655,7 +674,7 @@ def train_predictor(
         obs_y: list[np.ndarray] = []
         with torch.no_grad():
             vl = vn = 0.0
-            for x, y, m, _yt in batches(val, shuffle=False):
+            for x, y, m, _yt in batches("val", shuffle=False):
                 logits = student(x)
                 vl += float(masked_focal_loss(logits, y, m, pc.focal_gamma, pc.focal_alpha))
                 vn += 1
@@ -700,9 +719,17 @@ def train_predictor(
     from smartscan.analysis.metrics import prediction_scores
 
     student.eval()
+    # Accumulate rather than index: a streamed corpus has no dense val.x to
+    # forward in one shot, and materialising one would reintroduce the exact
+    # memory ceiling streaming exists to avoid.
+    probs_l, truth_l = [], []
     with torch.no_grad():
-        probs = torch.sigmoid(student(torch.as_tensor(val.x))).numpy()
-    history["scores_vs_truth"] = prediction_scores(val.y_true, probs)
+        for x, _y, _m, yt in batches("val", shuffle=False):
+            probs_l.append(torch.sigmoid(student(x)).numpy())
+            truth_l.append(yt.numpy() if hasattr(yt, "numpy") else np.asarray(yt))
+    probs = np.concatenate(probs_l)
+    truth = np.concatenate(truth_l)
+    history["scores_vs_truth"] = prediction_scores(truth, probs)
     history["distilled"] = teacher is not None
 
     # Score the teacher on the same validation split. Without this the student's
@@ -711,9 +738,11 @@ def train_predictor(
     # upper bound separates them. The gap IS the result of the distillation
     # experiment, so it is reported rather than inferred.
     if teacher is not None:
+        tp = []
         with torch.no_grad():
-            t_probs = torch.sigmoid(teacher(torch.as_tensor(val.x))).numpy()
-        history["teacher_scores_vs_truth"] = prediction_scores(val.y_true, t_probs)
+            for x, _y, _m, _yt in batches("val", shuffle=False):
+                tp.append(torch.sigmoid(teacher(x)).numpy())
+        history["teacher_scores_vs_truth"] = prediction_scores(truth, np.concatenate(tp))
 
     # Judge the model the way the scheduler uses it. `act` takes an argmax over
     # the predicted probabilities -- it RANKS channels and never applies a
