@@ -14,6 +14,7 @@ number is ever orphaned from the settings that produced it.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -195,6 +196,12 @@ def train(
         help="Windows per episode (predictor). Memory is linear in this; "
              "lowering it buys more episodes for the same RAM.",
     ),
+    workers: int = typer.Option(
+        -1, "--workers",
+        help="Dataloader workers for --dataset. -1 auto-sizes from CPU count; "
+             "0 loads in-process. The streaming path is data-bound, so this "
+             "matters more than the accelerator.",
+    ),
     dataset: str | None = typer.Option(
         None, "--dataset",
         help="Train the predictor by STREAMING the published corpus at this "
@@ -279,10 +286,23 @@ def train(
                 agent="sequential", max_windows_per_episode=64,
             )
             typer.echo(f"  windows: {len(tw)} train / {len(vw)} val (streamed)")
+            # Workers matter more than the GPU here. Each window is 4x128x128
+            # float32 = 256 KB, so a batch of 64 is 16 MB decoded from parquet;
+            # with the default of 0 workers that decode is single-threaded and
+            # the accelerator starves. Two Kaggle T4 runs spent ~14 h reaching
+            # teacher epoch 1 of 4 at ~9.5 s/batch, against 27 ms/step for the
+            # same model on an in-memory batch -- a 350x gap that is data
+            # loading, not compute.
+            n_workers = workers if workers >= 0 else min(8, (os.cpu_count() or 2) - 2)
             loaders = (
-                tw.loader(batch_size=cfg.predictor.batch_size, seed=cfg.run.seed),
-                vw.loader(batch_size=cfg.predictor.batch_size),
+                tw.loader(batch_size=cfg.predictor.batch_size, seed=cfg.run.seed,
+                          num_workers=n_workers, persistent_workers=n_workers > 0,
+                          prefetch_factor=4 if n_workers > 0 else None),
+                vw.loader(batch_size=cfg.predictor.batch_size,
+                          num_workers=n_workers, persistent_workers=n_workers > 0,
+                          prefetch_factor=4 if n_workers > 0 else None),
             )
+            typer.echo(f"  dataloader workers: {n_workers}")
 
         path = ckpt_dir / f"predictor_{tier}.pt"
         model, history = train_predictor(

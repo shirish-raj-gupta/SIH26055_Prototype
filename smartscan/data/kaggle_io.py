@@ -640,6 +640,37 @@ class OccupancyWindowDataset:
             replacement=True, generator=gen,
         )
 
+    def __getstate__(self) -> dict:
+        """Drop the cached torch module so the dataset can cross a process boundary.
+
+        ``num_workers > 0`` pickles the dataset to each worker. A stored module
+        object cannot be pickled, so workers failed to start with
+
+            TypeError: cannot pickle 'module' object
+
+        and the loader silently stayed single-threaded. That is not a cosmetic
+        fault: single-threaded decode costs ~6.3 s per batch of 64, because every
+        item re-reads its episode, and two Kaggle T4 runs spent ~14 h each
+        reaching teacher epoch 1 of 4 with the GPU at 0 % utilisation.
+
+        Returns:
+            The instance state without the module reference.
+        """
+        state = self.__dict__.copy()
+        state.pop("torch", None)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Re-import torch in the worker process.
+
+        Args:
+            state: State produced by :meth:`__getstate__`.
+        """
+        self.__dict__.update(state)
+        import torch
+
+        self.torch = torch
+
     def loader(self, batch_size: int = 64, seed: int = 0, **kwargs: Any) -> Any:
         """Return a ``DataLoader`` over this dataset.
 
