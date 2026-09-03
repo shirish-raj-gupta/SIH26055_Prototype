@@ -469,4 +469,17 @@ def external_validation_report(
                 "duration_s": stream.duration_s, "summary": stream.summary(), **row,
             })
 
-    return {**header, "available": True, "n_records": len(streams), "rows": rows}
+    # Record WHICH subset and split produced these numbers. Without it a reader
+    # cannot tell whether they describe `archive` (wideband, ~78 emitters) or
+    # `scan` (the scanning-emitter subset the problem statement asks for), and
+    # the two answer different questions -- the earlier report omitted this and
+    # was silently taken for the scan subset when it was archive.
+    return {
+        **header,
+        "available": True,
+        "subset": subset,
+        "split": split,
+        "n_records": len(streams),
+        "records": [s.summary() for s in streams],
+        "rows": rows,
+    }

@@ -411,6 +411,39 @@ over 9.5 s, with **73 distinct emitters**, 97.6 % of pulses landing in band:
 UCB1 leads on interception ratio (+44 % over the sweep) and holds the band far
 better (0.18 s vs 0.62 s worst-case staleness).
 
+**The `scan` subset — the one the brief actually asks for.** The table above is
+TSRD's `archive` subset. The problem statement names the *scan-mode* subset for
+external validation, and it is the harder and more relevant test: it contains
+the scanning emitters the scan-on-scan analysis is about. Three `test` records:
+
+| record | content | `whittle` / `phase_locked` | `sequential` |
+|---|---|---|---|
+| 1 | 788 PDWs, **1 emitter**, 1.20–1.50 GHz | 0.0 | 0.0 |
+| 2 | 50,013 PDWs, 30 emitters, 0.01–10.01 GHz | **0.0578** | 0.0098 |
+| 3 | 64,489 PDWs, 24 emitters, 0.01–11.84 GHz | **0.0669** | 0.0092 |
+
+On the two records that contain a real emitter population, `whittle` and
+`phase_locked` reach roughly **6x and 7x** the sweep's threat-weighted
+interception ratio, at 31.7 intercepts/s against 3.4. Record 1 has a single
+emitter in a 300 MHz slice and **no scheduler intercepts it at all** — reported
+rather than dropped, because a subset where everyone scores zero is information
+about the test, not noise to be tidied away.
+
+Three caveats, none of them small:
+
+* **n = 2 usable records.** This corroborates the synthetic result; it does not
+  independently establish it.
+* **`whittle` and `phase_locked` are byte-identical here.** On the synthetic
+  tiers they differ (0.0232 vs 0.0267). Identical output suggests
+  `phase_locked`'s period estimator finds nothing usable in these traces and it
+  falls back to its parent's behaviour — so this is one policy measured twice,
+  not two agreeing.
+* All the binning caveats above still apply.
+
+Reproduce with `smartscan external --subset scan --split test`. The report now
+records which subset produced it; an earlier run used `archive` and did not say
+so, which is precisely how a number gets attributed to the wrong experiment.
+
 **These numbers are reported separately and tagged `external: true`, and they
 are not comparable to the synthetic tiers.** The PDW-to-occupancy binning is an
 assumption of the bridge, the emitter mix is whatever TSRD contains rather than
