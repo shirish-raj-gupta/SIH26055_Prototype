@@ -60,6 +60,15 @@ AGENT_LABELS: dict[str, str] = {
     "whittle": "Whittle index (restless bandit)",
     "coprime_sweep": "Golden-ratio sweep (anti-lockout)",
     "phase_locked": "Phase-locked (predict & park)",
+    # The learned schedulers. Excluded while they had no checkpoints -- an
+    # untrained agent silently substitutes an analytic policy, so the demo would
+    # have shown UCB1 wearing another name. All twelve are trained now, so they
+    # belong on stage: `predictor` is the second-strongest agent on
+    # threat-weighted interception (+159 % over the tuned sweep at 30 seeds).
+    "predictor": "Occupancy predictor (transformer)",
+    "dqn": "Double-DQN (duelling, masked)",
+    "ppo": "PPO (from scratch)",
+    "hybrid": "Hybrid: predictor + PPO",
 }
 
 
