@@ -40,7 +40,7 @@ import numpy as np
 
 from smartscan.agents.base import Scheduler
 from smartscan.agents.belief import N_CHANNEL_FEATURES, N_GLOBAL_FEATURES, BeliefState
-from smartscan.config import Config
+from smartscan.config import Config, checkpoint_dir
 
 __all__ = ["ActorCritic", "DQNScheduler", "PPOScheduler", "train_dqn", "train_ppo"]
 
@@ -632,7 +632,7 @@ class _TorchScheduler(Scheduler):
 
     def _default_checkpoint(self) -> Path:
         """Conventional checkpoint location for this agent and tier."""
-        return Path(self.cfg.run.out_dir) / "checkpoints" / f"{self.key}_{self.cfg.scenario.difficulty}.pt"
+        return checkpoint_dir(self.cfg) / f"{self.key}_{self.cfg.scenario.difficulty}.pt"
 
     def _load(self) -> None:
         """Load weights if present; otherwise fall back to a policy that works."""

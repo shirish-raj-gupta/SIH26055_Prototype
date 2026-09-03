@@ -61,7 +61,7 @@ import numpy as np
 
 from smartscan.agents.base import Scheduler
 from smartscan.agents.belief import BeliefState
-from smartscan.config import Config
+from smartscan.config import Config, checkpoint_dir
 
 __all__ = [
     "PrivilegedAccess",
@@ -908,7 +908,7 @@ class SequencePredictorScheduler(Scheduler):
         self._fallback: Scheduler | None = None
 
         path = Path(checkpoint) if checkpoint else (
-            Path(config.run.out_dir) / "checkpoints" / f"predictor_{config.scenario.difficulty}.pt"
+            checkpoint_dir(config) / f"predictor_{config.scenario.difficulty}.pt"
         )
         if self.model is None:
             if path.is_file():

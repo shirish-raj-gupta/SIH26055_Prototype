@@ -28,7 +28,7 @@ import numpy as np
 
 from smartscan.agents.base import Scheduler
 from smartscan.agents.belief import N_CHANNEL_FEATURES, N_GLOBAL_FEATURES, BeliefState
-from smartscan.config import Config
+from smartscan.config import Config, checkpoint_dir
 
 __all__ = ["HYBRID_CHANNEL_FEATURES", "HybridScheduler", "train_hybrid"]
 
@@ -97,7 +97,7 @@ class HybridScheduler(Scheduler):
         super().__init__(config, seed, name)
         from smartscan.agents.predictors import SequencePredictorScheduler
 
-        ckpt_dir = Path(config.run.out_dir) / "checkpoints"
+        ckpt_dir = checkpoint_dir(config)
         tier = config.scenario.difficulty
         pred_path = Path(
             predictor_checkpoint
@@ -202,7 +202,7 @@ def train_hybrid(
     path = Path(
         predictor_checkpoint
         or config.rl.hybrid.predictor_checkpoint
-        or Path(config.run.out_dir) / "checkpoints" / f"predictor_{tier}.pt"
+        or checkpoint_dir(config) / f"predictor_{tier}.pt"
     )
     if not path.is_file():
         raise FileNotFoundError(

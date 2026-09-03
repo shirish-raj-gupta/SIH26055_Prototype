@@ -58,6 +58,38 @@ CONFIG_DIR_CANDIDATES: tuple[Path, ...] = (
 )
 
 
+
+def checkpoint_dir(config: Config) -> Path:
+    """Return the directory holding trained checkpoints, wherever it really is.
+
+    ``run.out_dir`` defaults to the relative ``"runs"``, which resolves against
+    the current working directory. Every command in this project is normally run
+    from the repository root, so that works by accident rather than by design --
+    and it stops working the moment something runs from elsewhere. Streamlit
+    Cloud executes ``dashboard/app.py`` from its own mount point, and there the
+    relative path silently finds nothing: each learned scheduler builds, sees no
+    weights, and substitutes an analytic policy. The demo stays honest, because
+    the agent renames itself, but the models are simply absent.
+
+    So try the configured location first, and fall back to the one beside the
+    installed package, mirroring ``CONFIG_DIR_CANDIDATES``.
+
+    Args:
+        config: Resolved configuration.
+
+    Returns:
+        The first candidate that exists, or the configured path unchanged so the
+        caller still writes where it was told to.
+    """
+    configured = Path(config.run.out_dir) / "checkpoints"
+    if configured.is_dir():
+        return configured
+    beside_package = Path(__file__).resolve().parent.parent / config.run.out_dir / "checkpoints"
+    if beside_package.is_dir():
+        return beside_package
+    return configured
+
+
 # --------------------------------------------------------------------------- #
 # Range: the `[lo, hi]` sampling-prior syntax used throughout the YAML
 # --------------------------------------------------------------------------- #
