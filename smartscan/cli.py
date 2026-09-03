@@ -284,13 +284,15 @@ def train(
                 vw.loader(batch_size=cfg.predictor.batch_size),
             )
 
+        path = ckpt_dir / f"predictor_{tier}.pt"
         model, history = train_predictor(
             cfg, seeds=train_seeds, arch=arch,
             max_windows_per_episode=windows_per_episode,
-            loaders=loaders,
+            loaders=loaders, checkpoint_path=path,
         )
-        path = ckpt_dir / f"predictor_{tier}.pt"
         save_predictor_checkpoint(model, history["arch"], path)
+        # The sidecar only ever describes a partial run.
+        (ckpt_dir / f"predictor_{tier}_progress.json").unlink(missing_ok=True)
         _write_json(ckpt_dir / f"predictor_{tier}_history.json", history)
         def _fmt(scores: dict[str, float]) -> str:
             return (

@@ -518,6 +518,68 @@ def load_predictor_checkpoint(config: Config, path: str | Path, torch: Any = Non
     return model
 
 
+def _pick_device(torch: Any) -> Any:
+    """Return the device to train on, verified by an actual kernel launch.
+
+    ``torch.cuda.is_available()`` is not sufficient. It returns True for a GPU
+    whose compute capability predates the installed build -- Kaggle handed out a
+    Tesla P100 (sm_60) against a cu128 wheel, and the failure only appeared when
+    a kernel was launched. So launch one.
+
+    Args:
+        torch: The imported torch module.
+
+    Returns:
+        A ``torch.device``.
+    """
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+    try:
+        (torch.zeros(8, 8, device="cuda") @ torch.zeros(8, 8, device="cuda")).cpu()
+        return torch.device("cuda")
+    except Exception:  # a GPU that cannot run a matmul is not a GPU we can use
+        return torch.device("cpu")
+
+
+
+def _save_predictor_progress(
+    state: Any, arch: str, path: str | Path | None, meta: dict[str, Any]
+) -> None:
+    """Write a mid-training predictor checkpoint atomically, or do nothing.
+
+    Mirrors the RL trainers' behaviour. The write goes to a temporary file and is
+    then replaced, so being killed *during* a save cannot leave a truncated
+    checkpoint where a working one used to be -- the failure mode periodic
+    checkpointing otherwise introduces.
+
+    The sidecar marks the file as partial. Without it a half-trained predictor
+    is indistinguishable on disk from a finished one, and the benchmark would
+    score it as final.
+
+    Args:
+        state: State dict to write.
+        arch: Architecture the weights belong to.
+        path: Destination checkpoint; ``None`` disables.
+        meta: Progress fields for the sidecar.
+    """
+    if path is None:
+        return
+    import json
+
+    torch = _require_torch()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    torch.save({"arch": arch, "state_dict": state}, tmp)
+    tmp.replace(path)
+
+    side = path.with_name(f"{path.stem}_progress.json")
+    tmp_side = side.with_suffix(".tmp")
+    tmp_side.write_text(json.dumps(meta, indent=2, default=float), encoding="utf-8")
+    tmp_side.replace(side)
+
+
+
 def train_predictor(
     config: Config,
     dataset: PredictorDataset | None = None,
@@ -526,6 +588,7 @@ def train_predictor(
     verbose: bool = True,
     max_windows_per_episode: int = 400,
     loaders: tuple[Any, Any] | None = None,
+    checkpoint_path: str | Path | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Train the occupancy predictor, optionally distilling from a teacher.
 
@@ -545,6 +608,11 @@ def train_predictor(
             episodes than fit in RAM -- ``build_windows`` holds one dense array
             and caps out around 40 episodes on a 16 GB box, while the published
             corpus has 854 for MEDIUM alone.
+        checkpoint_path: Save the best-so-far weights here after every epoch that
+            improves. ``None`` disables. Training on the full corpus runs for
+            hours and a 12 h Kaggle run has already been cancelled mid-epoch and
+            lost everything, so a long run should not depend on reaching its
+            last line.
 
     Returns:
         ``(student model, history dict)``. When distillation is enabled the
@@ -556,6 +624,10 @@ def train_predictor(
     torch.manual_seed(SeedTree(config.run.seed).torch_seed())
     if config.run.deterministic:
         torch.set_num_threads(int(config.run.torch_threads))
+
+    device = _pick_device(torch)
+    if verbose:
+        print(f"  device: {device}", flush=True)
 
     pc = config.predictor
     streaming = loaders is not None
@@ -579,7 +651,8 @@ def train_predictor(
     def batches(which: str, shuffle: bool = True):
         """Yield ``(x, y, mask, y_true)`` from either source."""
         if streaming:
-            yield from (train_loader if which == "train" else val_loader)
+            for batch in (train_loader if which == "train" else val_loader):
+                yield tuple(t.to(device) for t in batch)
             return
         ds = train if which == "train" else val
         idx = np.arange(len(ds))
@@ -588,8 +661,8 @@ def train_predictor(
         for s in range(0, len(idx), pc.batch_size):
             b = idx[s : s + pc.batch_size]
             yield (
-                torch.as_tensor(ds.x[b]), torch.as_tensor(ds.y[b]),
-                torch.as_tensor(ds.mask[b]), torch.as_tensor(ds.y_true[b]),
+                torch.as_tensor(ds.x[b]).to(device), torch.as_tensor(ds.y[b]).to(device),
+                torch.as_tensor(ds.mask[b]).to(device), torch.as_tensor(ds.y_true[b]).to(device),
             )
 
     history: dict[str, Any] = {"arch": arch or pc.arch, "student_loss": [], "val_loss": []}
@@ -598,9 +671,9 @@ def train_predictor(
     teacher = None
     if pc.distillation.enabled:
         with PrivilegedAccess("teacher sees the full occupancy tensor"):
-            teacher = build_predictor(config, arch)
+            teacher = build_predictor(config, arch).to(device)
             opt_t = torch.optim.Adam(teacher.parameters(), lr=pc.lr)
-            full = torch.ones(1, dtype=torch.bool)
+            full = torch.ones(1, dtype=torch.bool, device=device)
             for ep in range(pc.distillation.teacher_epochs):
                 teacher.train()
                 tot = n = 0.0
@@ -618,7 +691,7 @@ def train_predictor(
             teacher.eval()
 
     # -- 2. observation-only student --------------------------------------- #
-    student = build_predictor(config, arch)
+    student = build_predictor(config, arch).to(device)
     opt = torch.optim.Adam(student.parameters(), lr=pc.lr)
     temp = pc.distillation.temperature
 
@@ -639,13 +712,13 @@ def train_predictor(
     # their mask, never against privileged truth: the teacher may see the full
     # tensor during training, but choosing which epoch to ship with it would
     # leak privileged information into the delivered artefact.
-    import copy
 
     from smartscan.analysis.metrics import prediction_scores
 
     best_ap = -1.0
     best_val = float("inf")
-    best_state = copy.deepcopy(student.state_dict())
+    best_state = {k: v.detach().cpu().clone()
+                  for k, v in student.state_dict().items()}
     best_epoch = 0
 
     for ep in range(pc.epochs):
@@ -678,10 +751,10 @@ def train_predictor(
                 logits = student(x)
                 vl += float(masked_focal_loss(logits, y, m, pc.focal_gamma, pc.focal_alpha))
                 vn += 1
-                sel = m.numpy().astype(bool)
+                sel = m.cpu().numpy().astype(bool)
                 if sel.any():
-                    obs_p.append(torch.sigmoid(logits).numpy()[sel])
-                    obs_y.append(y.numpy()[sel])
+                    obs_p.append(torch.sigmoid(logits).cpu().numpy()[sel])
+                    obs_y.append(y.cpu().numpy()[sel])
         val_loss = vl / max(vn, 1)
         val_ap = float("nan")
         if obs_p:
@@ -694,7 +767,17 @@ def train_predictor(
         improved = np.isfinite(val_ap) and val_ap > best_ap + 1e-6
         if improved:
             best_ap, best_val, best_epoch = val_ap, val_loss, ep + 1
-            best_state = copy.deepcopy(student.state_dict())
+            best_state = {k: v.detach().cpu().clone()
+                          for k, v in student.state_dict().items()}
+            # Persist the BEST state, not the current one -- it is what would be
+            # shipped anyway, so an interrupted run leaves the same artefact a
+            # completed one would have left at this point.
+            _save_predictor_progress(
+                best_state, arch or pc.arch, checkpoint_path,
+                {"epoch": ep + 1, "epochs_planned": pc.epochs,
+                 "best_val_ap": best_ap, "best_val_loss": best_val,
+                 "complete": False},
+            )
         if verbose:
             print(
                 f"  student epoch {ep + 1}/{pc.epochs} train={tot / max(n, 1):.4f} "
@@ -711,6 +794,7 @@ def train_predictor(
             break
 
     student.load_state_dict(best_state)
+    student.to(device)
     history["best_epoch"] = best_epoch
     history["best_val_loss"] = best_val
     history["best_val_ap"] = best_ap
@@ -725,8 +809,8 @@ def train_predictor(
     probs_l, truth_l = [], []
     with torch.no_grad():
         for x, _y, _m, yt in batches("val", shuffle=False):
-            probs_l.append(torch.sigmoid(student(x)).numpy())
-            truth_l.append(yt.numpy() if hasattr(yt, "numpy") else np.asarray(yt))
+            probs_l.append(torch.sigmoid(student(x)).cpu().numpy())
+            truth_l.append(yt.cpu().numpy())
     probs = np.concatenate(probs_l)
     truth = np.concatenate(truth_l)
     history["scores_vs_truth"] = prediction_scores(truth, probs)
@@ -741,7 +825,7 @@ def train_predictor(
         tp = []
         with torch.no_grad():
             for x, _y, _m, _yt in batches("val", shuffle=False):
-                tp.append(torch.sigmoid(teacher(x)).numpy())
+                tp.append(torch.sigmoid(teacher(x)).cpu().numpy())
         history["teacher_scores_vs_truth"] = prediction_scores(truth, np.concatenate(tp))
 
     # Judge the model the way the scheduler uses it. `act` takes an argmax over
