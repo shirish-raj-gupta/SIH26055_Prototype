@@ -624,7 +624,23 @@ def _write_figures(
                 )
             )
 
-    written = plots.save_all(per_agent, cfg, out)
+    # F4 needs the RL training logs, which live beside the checkpoints. Without
+    # them save_all silently skips the figure -- the grid reported "wrote N
+    # figures" and no learning curves, with nothing saying why.
+    logs: dict[str, Any] = {}
+    ckpt_dir = Path(cfg.run.out_dir) / "checkpoints"
+    for f in sorted(ckpt_dir.glob("*_trainlog.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # A curve of one point is not a curve; it renders as an empty panel.
+        if len(d.get("returns", [])) > 1:
+            logs[f.name.replace("_trainlog.json", "")] = d
+    if not logs:
+        print(f"[benchmark] no usable trainlogs in {ckpt_dir}; F4 will be skipped")
+
+    written = plots.save_all(per_agent, cfg, out, logs=logs or None)
     written.append(plots.plot_scan_on_scan(cfg, out / "f6_scan_on_scan.png"))
     ablation = out / "ablation.json"
     if ablation.is_file():
