@@ -25,3 +25,17 @@ rl:
 
 predictor:
   epochs: 20
+
+# EASY inherited base's 7-agent list, which predates the learned schedulers
+# being trainable. All four now have EASY checkpoints -- and predictor_easy is
+# the strongest predictor in the project (AUC 0.911, 20.6x AP lift over the
+# base rate) -- so leaving them out meant the tier's own best model never
+# appeared in its own leaderboard.
+#
+# coprime_sweep and phase_locked are included for comparison even though EASY
+# has no scanning radars for them to lock onto: a scan-on-scan policy showing
+# no advantage where there is nothing to scan against is a useful control, not
+# a wasted row.
+eval:
+  agents: [sequential, random, priority_rr, epsilon_greedy, ucb1, thompson,
+           whittle, coprime_sweep, phase_locked, predictor, dqn, ppo, hybrid]
