@@ -362,7 +362,7 @@ def _render_reasoning(track: Track, cfg: Config) -> None:
             "stale (ms)": int(belief.time_since_visit[ch] * cfg.time.dt_s * 1e3),
             "hits": int(belief.n_hits[ch]),
         })
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
     if track.last_reason:
         st.info(f"**Tuned to {track.last_reason}**", icon="🎯")
 
@@ -421,10 +421,10 @@ def main() -> None:
                          help="Plays a scripted scenario unattended.")
 
         c1, c2, c3 = st.columns(3)
-        play = c1.button("▶ Play", use_container_width=True)
-        step_once = c2.button("⏭ Step", use_container_width=True)
-        reset = c3.button("⟳ Reset", use_container_width=True)
-        inject = st.button("⚡ Inject pop-up threat", use_container_width=True,
+        play = c1.button("▶ Play", width="stretch")
+        step_once = c2.button("⏭ Step", width="stretch")
+        reset = c3.button("⟳ Reset", width="stretch")
+        inject = st.button("⚡ Inject pop-up threat", width="stretch",
                            help="Spawn a new emitter mid-episode and watch who notices.")
 
     cfg, scenario, episode, pd_tensor = _episode_for(tier, int(seed), n_emitters, ibw, settle)
@@ -479,7 +479,7 @@ def main() -> None:
         with col_plot:
             st.plotly_chart(
                 _waterfall(track, cfg, episode, pd_tensor, AGENT_LABELS.get(key, key)),
-                use_container_width=True, key=f"wf_{i}_{key}",
+                width="stretch", key=f"wf_{i}_{key}",
             )
         with col_metrics:
             _render_gauges(_metrics(track, cfg, episode, pd_tensor))
