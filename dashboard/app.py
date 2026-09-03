@@ -19,8 +19,10 @@ running delta. Any difference you see is the policy, not chance.
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -34,13 +36,21 @@ except ImportError:  # pragma: no cover - the module is only run under streamlit
         "then:  make demo"
     ) from None
 
-from smartscan.agents import build_agent
-from smartscan.agents.belief import BeliefState
-from smartscan.config import Config, load_config
-from smartscan.env.receiver import Receiver
-from smartscan.env.rf_environment import build_episode, generate_scenario
-from smartscan.hal.simulated import detection_probability_tensor
-from smartscan.runner import RewardAccountant
+# Streamlit runs this file directly, so sys.path[0] is dashboard/ rather than the
+# repository root, and `import smartscan` fails on a deployment that has not
+# pip-installed the package. Locally it works only because `make demo` is run
+# from the root. Put the root on the path before importing anything from it.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from smartscan.agents import build_agent  # noqa: E402
+from smartscan.agents.belief import BeliefState  # noqa: E402
+from smartscan.config import Config, load_config  # noqa: E402
+from smartscan.env.receiver import Receiver  # noqa: E402
+from smartscan.env.rf_environment import build_episode, generate_scenario  # noqa: E402
+from smartscan.hal.simulated import detection_probability_tensor  # noqa: E402
+from smartscan.runner import RewardAccountant  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # Palette. Colour carries meaning, never decoration.
