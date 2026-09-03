@@ -233,6 +233,37 @@ The bootstrap numbers in this table are kept because the brief asks for the
 point estimate, but **the log-rank table is the one to believe**. They disagree,
 and the disagreement is the finding.
 
+### Robustness under distribution shift
+
+Three shifts, 12 paired seeds each, all evaluated with a MEDIUM-tuned
+configuration so the degradation is attributable to the shift and not to
+re-tuning. Threat-weighted interception ratio, median:
+
+| Scheduler | in-dist | tier → HARD | 2× density | class hold-out |
+|---|---|---|---|---|
+| `whittle` | 0.0232 | **−2 %** | **+2 %** | **−5 %** |
+| `phase_locked` | 0.0267 | −6 % | −11 % | −17 % |
+| `sequential` (baseline) | 0.0161 | −20 % | −12 % | −7 % |
+| `ucb1` | 0.0125 | −35 % | −9 % | −8 % |
+| `dqn` | 0.0260 | +4 % | −21 % | +11 % |
+| `predictor` | 0.0277 | +52 % | +45 % | −8 % |
+
+**`whittle` is the most shift-stable policy in the set**, inside ±5 % on all
+three, and it degrades markedly less than the sweep it is measured against. That
+is the argument for an index policy over a fitted one: it derives its behaviour
+from a belief model rather than from a training distribution, so there is less
+to invalidate when the distribution moves.
+
+**Read `predictor`'s +52 % and +45 % with suspicion rather than pleasure.** A
+policy does not become better at a task by being given a harder one. Both shifts
+add emitters, and more simultaneously-active emitters mean more channels worth
+tuning to, so the interception ratio can rise while the scheduling problem gets
+harder. It is a property of the metric under a changed emitter mix, not evidence
+of generalisation, and it is exactly why the log-rank hard-target analysis above
+exists.
+
+Reproduce with `smartscan robustness --config configs/medium.yaml`.
+
 ### Retracted: the `coverage_weight` tuning result
 
 A five-seed ablation reported that raising `agents.coverage_weight` from 1.0 to
