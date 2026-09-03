@@ -21,7 +21,19 @@ scenario:
   n_popup: 0
 
 rl:
-  total_steps: 200000
+  # 200k was enough for plain PPO but not for the hybrid, whose observation is
+  # a plane wider (B*13 + G against B*12 + G). At 200k the hybrid collapsed to
+  # a single channel under greedy inference -- coverage 0.000, TWIR 0.0000 --
+  # while its training return of 62.4 looked merely mediocre. See
+  # `Known limitations` in the README.
+  total_steps: 600000
+  hybrid:
+    # Hybrid ONLY -- plain PPO trains fine at the shared 0.01 and must not be
+    # changed by this. Raised because the hybrid drives its entropy to 0.362
+    # mid-run and then locks onto one channel under greedy evaluation. This
+    # buys a non-degenerate policy, not a good one: the result sits near
+    # uniform and behaves close to randomly.
+    entropy_coef: 0.03
 
 predictor:
   epochs: 20

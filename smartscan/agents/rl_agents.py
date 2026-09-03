@@ -331,12 +331,15 @@ def train_ppo(
     # per-instance rolling window, so sharing one across parallel envs would
     # interleave eight episodes' histories into a single buffer.
     n_features = N_CHANNEL_FEATURES
+    ent_coef = float(ppo.entropy_coef)
     adapters: list[Any] = []
     if hybrid:
         from smartscan.agents.hybrid import HYBRID_CHANNEL_FEATURES, HybridObservationAdapter
         from smartscan.agents.predictors import SequencePredictorScheduler
 
         n_features = HYBRID_CHANNEL_FEATURES
+        if config.rl.hybrid.entropy_coef is not None:
+            ent_coef = float(config.rl.hybrid.entropy_coef)
         for i in range(n_envs):
             pred = SequencePredictorScheduler(config, config.run.seed + i)
             if pred._fallback is not None:
@@ -453,7 +456,7 @@ def train_ppo(
                 ).mean()
                 loss_v = ((value - flat_ret[b]) ** 2).mean()
                 entropy = dist.entropy().mean()
-                loss = loss_pi + ppo.value_coef * loss_v - ppo.entropy_coef * entropy
+                loss = loss_pi + ppo.value_coef * loss_v - ent_coef * entropy
 
                 opt.zero_grad()
                 loss.backward()

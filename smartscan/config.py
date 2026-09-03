@@ -584,8 +584,23 @@ class DQNConfig(_Base):
 
 
 class HybridConfig(_Base):
+    """The hybrid agent, which is PPO over predictor-augmented observations.
+
+    ``entropy_coef`` is separate from ``rl.ppo.entropy_coef`` because the two
+    agents need different values. Plain PPO trains fine at 0.01; the hybrid,
+    whose observation is a plane wider, drives its policy entropy down to 0.362
+    mid-run and then collapses to a single channel under the greedy argmax used
+    at evaluation -- coverage 0.000 on EASY, while its training return of 62.4
+    looked merely mediocre. A stronger bonus prevents that.
+
+    It does not make the hybrid good. The resulting policy sits near uniform and
+    behaves close to randomly; this is a pathology fix, not a performance
+    result. ``None`` falls back to the shared PPO value.
+    """
+
     predictor_checkpoint: str | None = None
     freeze_predictor: bool = True
+    entropy_coef: float | None = Field(default=None, ge=0.0)
 
 
 class RLConfig(_Base):
