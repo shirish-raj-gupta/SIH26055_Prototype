@@ -522,23 +522,35 @@ Stated because they are the first things a reviewer should ask about.
    The bootstrap figures are retained only because the brief asks for a point
    estimate; **the log-rank result is the one to cite.** Comparisons below 10
    finite pairs are additionally withheld and reported as withheld.
-3. **Two learned policies fail by parking.** `ppo` and `hybrid` reach a median
+3. **The hybrid does not reliably learn a policy at all.** Under the greedy
+   argmax used at evaluation it collapses to a *single channel* on two of three
+   tiers — `hybrid_easy` and `hybrid_hard` each tune to one channel for all
+   9,998 slots, giving coverage 0.000 and TWIR 0.0000 on EASY. This is not a
+   budget problem: `hybrid_hard` had 3,000,000 steps. Its training entropy
+   stays near-uniform (4.419 against a maximum of log 128 = 4.852), so the
+   policy has almost no preference; sampling during training makes that look
+   like exploration and scores a respectable 236.0, while greedy inference
+   exposes that the microscopic preference is the same channel every time.
+   **A hybrid training return is therefore not evidence that it learned
+   anything.** `hybrid_medium` (99 distinct channels) is the exception, and it
+   is not clear why.
+4. **Two learned policies fail by parking.** `ppo` and `hybrid` reach a median
    worst-case staleness of 10.0 s and 9.86 s on MEDIUM — the whole episode —
    leaving part of the band unvisited throughout. Their interception gains are
    bought by abandoning coverage, which is a failure of the reward function as
    a proxy for the mission rather than a training bug.
-4. **The predictors saw ~5 % of the available data.** Each was trained on ~40
+5. **The predictors saw ~5 % of the available data.** Each was trained on ~40
    episodes regenerated from seeds; the published corpus holds 854 train
    episodes for MEDIUM alone. `--dataset` now streams the full corpus, but the
    shipped checkpoints predate it. Note that `predictor_easy` reached AUC 0.911
    from the *smallest* corpus of the three, so more data is not obviously the
    limitation.
-5. **RL has not been trained to convergence** (§17-B, §21-G).
-6. **Sector-scan period estimates are ambiguous by a factor of 2.** A
+6. **RL has not been trained to convergence** (§17-B, §21-G).
+7. **Sector-scan period estimates are ambiguous by a factor of 2.** A
    bidirectional sweep genuinely illuminates twice per frame.
-7. **The TTFI half of acceptance test 3 is a point estimate, not a significant
+8. **The TTFI half of acceptance test 3 is a point estimate, not a significant
    result.** See the results section: the CI straddles zero at 30 seeds.
-8. **Sim-to-real gap.** The claim is scheduling-policy quality, not RF realism.
+9. **Sim-to-real gap.** The claim is scheduling-policy quality, not RF realism.
 
 ---
 
