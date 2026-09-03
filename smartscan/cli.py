@@ -368,6 +368,29 @@ def ablate(
     typer.secho(f"wrote {out}", fg=typer.colors.GREEN)
 
 
+@app.command()
+def robustness(
+    config: str = _CONFIG,
+    agents: str | None = typer.Option(None, help="Comma-separated keys; defaults to eval.agents."),
+    n_seeds: int = typer.Option(12),
+    out: str = typer.Option("reports/robustness.json"),
+    set_: list[str] = _SET,
+) -> None:
+    """Distribution-shift tests: tier shift, density shift, class hold-out.
+
+    Reported without flattering. A graceful-degradation curve is a stronger
+    result than a hidden failure, and this is the section a defence evaluator
+    reads first.
+    """
+    from smartscan.eval.ablation import robustness_shift
+
+    cfg = _resolve(config, set_)
+    keys = [a.strip() for a in agents.split(",")] if agents else list(cfg.eval.agents)
+    report = robustness_shift(cfg, keys, n_seeds=n_seeds)
+    _write_json(Path(out), report)
+    typer.secho(f"wrote {out}", fg=typer.colors.GREEN)
+
+
 @app.command("export-onnx")
 def export_onnx_cmd(
     config: str = _CONFIG,
