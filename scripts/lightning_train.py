@@ -281,7 +281,13 @@ def main() -> int:
     print(f"  machine     {args.machine}")
     print(f"  job         {name}")
     print(f"  corpus      {corpus}")
-    print(f"  dense RAM   ~{gb:.1f} GB peak   (local ceiling was ~40 episodes)")
+    if args.all_tiers and args.dataset:
+        # Streaming allocates no dense corpus at all. Printing the dense figure
+        # here would suggest a RAM requirement the run does not have, which is
+        # the whole reason for using this path.
+        print("  dense RAM   n/a - streamed, no dense corpus is materialised")
+    else:
+        print(f"  dense RAM   ~{gb:.1f} GB peak   (local ceiling was ~40 episodes)")
     # Quoting one machine's price regardless of the machine chosen is how a
     # $55 job gets announced as a $95 one, or worse, the reverse.
     rate = {"DATA_PREP": 9.25, "L4_X_8": 15.90, "T4_X_4": 4.69, "T4": 1.10,
