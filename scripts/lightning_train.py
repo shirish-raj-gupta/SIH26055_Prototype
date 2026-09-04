@@ -73,7 +73,14 @@ def main() -> int:
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--windows-per-episode", type=int, default=400)
     ap.add_argument("--arch", default="transformer")
-    ap.add_argument("--machine", default="A100")
+    # A100/L4 are rejected on this account's AWS cluster ("accelerator lit-a100-1
+    # not found"); T4 and the CPU_X_* tiers are what actually launch. Probed, not
+    # assumed -- the SDK exposes every machine name regardless of entitlement.
+    ap.add_argument("--machine", default="T4")
+    ap.add_argument("--studio", default=None,
+                    help="Studio supplying the environment. Job.run needs either "
+                         "this or an image; with neither it tries to autodetect "
+                         "and fails with 'Cannot autodetect Studio'.")
     ap.add_argument("--name", default=None)
     ap.add_argument("--max-runtime", type=int, default=3600,
                     help="Seconds. A cap is not optional on metered compute.")
@@ -105,16 +112,35 @@ def main() -> int:
 
     import os
 
-    from lightning_sdk import Job, Machine
+    from lightning_sdk import Job, Machine, Teamspace
 
+    # Resolve the teamspace and studio explicitly. This account has TWO
+    # teamspaces both named "default-project" -- one org-owned, one user-owned --
+    # and letting the SDK autodetect resolves to the org one, where the studio
+    # does not exist ("Studio 'scratch-studio-devbox' does not exist").
+    ts = Teamspace(
+        name=os.environ.get("LIGHTNING_TEAMSPACE", "default-project"),
+        user=os.environ.get("LIGHTNING_USERNAME"),
+    )
+    # Fall back to whatever studio the teamspace actually has. Studios get
+    # renamed and recreated in the UI, and hardcoding one turns an unrelated
+    # rename into a failed submission.
+    available = ts.studios
+    if not available:
+        print("no studio in this teamspace; Job.run needs a studio or an image")
+        return 1
+    studio = next((s for s in available if s.name == args.studio), None) if args.studio else available[0]
+    if studio is None:
+        print(f"studio {args.studio!r} not found. Available: {[s.name for s in available]}")
+        return 1
+    print(f"  studio      {studio.name}")
     machine = getattr(Machine, args.machine)
     job = Job.run(
         name=name,
         machine=machine,
         command=cmd,
-        teamspace=os.environ.get("LIGHTNING_TEAMSPACE", "default-project"),
-        user=os.environ.get("LIGHTNING_USERNAME"),
-        max_runtime=args.max_runtime,
+        studio=studio,
+        teamspace=ts,
         interruptible=True,   # cheaper, and this job is restartable by design
     )
     print(f"submitted: {job.name}")
