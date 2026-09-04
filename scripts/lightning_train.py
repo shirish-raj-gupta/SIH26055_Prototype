@@ -91,8 +91,14 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
         f" sleep 300; done ) & SYNC=$!",
     ]
     for gpu, (tier, episodes) in enumerate(FULL_CORPUS.items()):
+        # On a CPU machine every torch process otherwise grabs all cores, so
+        # three tiers oversubscribe 3x and thrash. Split the cores evenly.
+        # Harmless on a GPU box, where the work is not on the CPU anyway.
         lines.append(
-            f"CUDA_VISIBLE_DEVICES={gpu} python -m smartscan.cli train"
+            f"CUDA_VISIBLE_DEVICES={gpu}"
+            f" OMP_NUM_THREADS=$(( $(nproc) / {len(FULL_CORPUS)} ))"
+            f" MKL_NUM_THREADS=$(( $(nproc) / {len(FULL_CORPUS)} ))"
+            f" python -m smartscan.cli train"
             f" --what predictor --config configs/{tier}.yaml --arch {arch}"
             f" --episodes {episodes} --windows-per-episode {wpe}{seed_arg}"
             f" > {tier}.log 2>&1 & P{gpu}=$!"
@@ -215,8 +221,16 @@ def main() -> int:
     print(f"  job         {name}")
     print(f"  corpus      {corpus}")
     print(f"  dense RAM   ~{gb:.1f} GB peak   (local ceiling was ~40 episodes)")
-    print(f"  max runtime {args.max_runtime}s"
-          f"  -> up to ${args.max_runtime / 3600 * 15.90:.2f} at L4x8 on-demand")
+    # Quoting one machine's price regardless of the machine chosen is how a
+    # $55 job gets announced as a $95 one, or worse, the reverse.
+    rate = {"DATA_PREP": 9.25, "L4_X_8": 15.90, "T4_X_4": 4.69, "T4": 1.10,
+            "CPU": 1.25, "L40S_X_8": 33.68, "H100_X_8": 33.12}.get(args.machine)
+    if rate:
+        print(f"  max runtime {args.max_runtime}s  -> up to "
+              f"${args.max_runtime / 3600 * rate:.2f} at {args.machine} "
+              f"(${rate}/hr on-demand)")
+    else:
+        print(f"  max runtime {args.max_runtime}s  (rate for {args.machine} unknown)")
     print(f"\n  command:\n    {cmd}\n")
     if args.dry_run:
         print("--dry-run: nothing submitted.")
