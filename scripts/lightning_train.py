@@ -46,7 +46,7 @@ MB_PER_EPISODE = 105
 FULL_CORPUS = {"easy": 694, "medium": 854, "hard": 557}
 
 
-def build_all_tiers_command(wpe: int, arch: str, seed: int | None) -> str:
+def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str) -> str:
     """Compose a command that trains all three tiers CONCURRENTLY, one per GPU.
 
     Submitting three separate jobs would rent three machines. The dense corpus
@@ -61,11 +61,14 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None) -> str:
         wpe: Windows drawn per episode.
         arch: Predictor architecture.
         seed: Run seed, or None to leave the config default.
+        job_name: Job name, which fixes the artifact directory. Anything not
+            copied there dies with the machine.
 
     Returns:
         A single shell command string.
     """
     seed_arg = f" --set run.seed={seed}" if seed is not None else ""
+    art = f"/teamspace/jobs/{job_name}/artifacts"
     lines = [
         # onnx is not in the studio image; without it the export step fails
         # AFTER training has already succeeded and the job is marked Failed,
@@ -78,6 +81,14 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None) -> str:
         "nvidia-smi --query-gpu=index,name,memory.total --format=csv || true",
         "python -c \"import torch; print('torch', torch.__version__, "
         "'cuda', torch.cuda.is_available(), 'devices', torch.cuda.device_count())\"",
+    ]
+    lines += [
+        f"mkdir -p {art} || true",
+        # Sync every 5 min, not just at the end: if the job hits its runtime cap
+        # the final copy never runs, and hours of training would be lost the way
+        # the 100-episode checkpoint was.
+        f"( while true; do cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null;"
+        f" sleep 300; done ) & SYNC=$!",
     ]
     for gpu, (tier, episodes) in enumerate(FULL_CORPUS.items()):
         lines.append(
@@ -95,7 +106,14 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None) -> str:
     # Export is best-effort: a failed export must not mask a trained model.
     for tier in FULL_CORPUS:
         lines.append(f"python -m smartscan.cli export-onnx --config configs/{tier}.yaml || true")
-    lines.append("ls -la runs/checkpoints runs/onnx || true")
+    # Copy BEFORE the exit-code test, so a tier that failed does not discard the
+    # two that succeeded.
+    lines += [
+        "kill $SYNC 2>/dev/null || true",
+        f"cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null || true",
+        f"cp -f easy.log medium.log hard.log {art}/ 2>/dev/null || true",
+        f"echo '=== artifacts persisted ==='; ls -laR {art} || true",
+    ]
     # Make the JOB status mean "all three tiers trained".
     lines.append("test $R0 -eq 0 -a $R1 -eq 0 -a $R2 -eq 0")
     return " && ".join(lines[:1]) + " ; " + " ; ".join(lines[1:])
@@ -176,8 +194,9 @@ def main() -> int:
     scale = args.windows_per_episode / 400 * MB_PER_EPISODE / 1024
     if args.all_tiers:
         gb = sum(FULL_CORPUS.values()) * scale
-        cmd = build_all_tiers_command(args.windows_per_episode, args.arch, args.seed)
         name = args.name or "predictor-full-corpus-3tier"
+        cmd = build_all_tiers_command(args.windows_per_episode, args.arch,
+                                      args.seed, name)
         corpus = " + ".join(f"{t} {n}" for t, n in FULL_CORPUS.items())
         corpus += f" = {sum(FULL_CORPUS.values())} episodes (full train split)"
     else:
