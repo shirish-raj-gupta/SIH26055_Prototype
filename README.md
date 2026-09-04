@@ -413,32 +413,45 @@ better (0.18 s vs 0.62 s worst-case staleness).
 
 **The `scan` subset — the one the brief actually asks for.** The table above is
 TSRD's `archive` subset. The problem statement names the *scan-mode* subset for
-external validation, and it is the harder and more relevant test: it contains
-the scanning emitters the scan-on-scan analysis is about. Three `test` records:
+external validation, and it is the more relevant test: it contains the scanning
+emitters the scan-on-scan analysis is about. Eight `test` records, threat-weighted
+interception ratio, `whittle` (and `phase_locked`, see below) against the sweep:
 
-| record | content | `whittle` / `phase_locked` | `sequential` |
-|---|---|---|---|
-| 1 | 788 PDWs, **1 emitter**, 1.20–1.50 GHz | 0.0 | 0.0 |
-| 2 | 50,013 PDWs, 30 emitters, 0.01–10.01 GHz | **0.0578** | 0.0098 |
-| 3 | 64,489 PDWs, 24 emitters, 0.01–11.84 GHz | **0.0669** | 0.0092 |
+| record | content | `whittle` | `sequential` | ratio |
+|---|---|---|---|---|
+| 0 | 788 PDWs, **1 emitter**, 1.20–1.50 GHz | 0.0000 | 0.0000 | — nobody intercepts |
+| 1 | 50,013 PDWs, 30 emitters, 0.01–10.01 GHz | 0.0578 | 0.0098 | 5.9x |
+| 2 | 64,489 PDWs, 24 emitters, 0.01–11.84 GHz | 0.0669 | 0.0092 | 7.3x |
+| 3 | 40,701 PDWs, 16 emitters, 0.02–16.05 GHz | 0.0198 | 0.0040 | 5.0x |
+| 4 | 4,259 PDWs, 6 emitters, 1.22–9.52 GHz | 0.0189 | 0.0019 | **10.0x** |
+| 5 | 133,089 PDWs, 32 emitters, 0.15–11.41 GHz | 0.0557 | 0.0104 | 5.3x |
+| 6 | 39,781 PDWs, 15 emitters, 0.01–10.01 GHz | 0.0764 | 0.0130 | 5.9x |
+| 7 | 9,607 PDWs, 7 emitters, 1.26–9.84 GHz | 0.1002 | 0.0084 | **11.9x** |
 
-On the two records that contain a real emitter population, `whittle` and
-`phase_locked` reach roughly **6x and 7x** the sweep's threat-weighted
-interception ratio, at 31.7 intercepts/s against 3.4. Record 1 has a single
-emitter in a 300 MHz slice and **no scheduler intercepts it at all** — reported
-rather than dropped, because a subset where everyone scores zero is information
-about the test, not noise to be tidied away.
+**`whittle` beats the sweep on all seven usable records, never below 5x**, median
+5.9x, at 27.0 intercepts/s against 3.3. This is real third-party pulse data, on
+the subset the brief specifies, and it is the single strongest external result
+in the project.
 
-Three caveats, none of them small:
+Record 0 is kept although every scheduler scores zero: one emitter in a 300 MHz
+slice is not interceptable by anything here, and a record nobody can score on is
+information about the test rather than noise to be tidied away.
 
-* **n = 2 usable records.** This corroborates the synthetic result; it does not
-  independently establish it.
-* **`whittle` and `phase_locked` are byte-identical here.** On the synthetic
-  tiers they differ (0.0232 vs 0.0267). Identical output suggests
-  `phase_locked`'s period estimator finds nothing usable in these traces and it
-  falls back to its parent's behaviour — so this is one policy measured twice,
-  not two agreeing.
-* All the binning caveats above still apply.
+**The bridge's reading of TSRD is verified against the raw HDF5**, not assumed.
+Column names match `feature_names` exactly (`UTCTime, RF, PulseWidth, AOA, PA`);
+`UTCTime` is microseconds (span 9,536,935 → 9.537 s, matching the reported
+duration); `RF` is MHz, confirmed by `freqs_mhz` in the transmitter metadata;
+`PulseWidth` is microseconds, confirmed by `pws_us`; and the 78 distinct labels
+match the emitter count we report. A silent factor of 1000 anywhere in that
+chain would have invalidated every external number without changing a single
+error message.
+
+One caveat that has not gone away: **`whittle` and `phase_locked` are
+byte-identical on this subset**, while differing on the synthetic tiers
+(0.0232 vs 0.0267). That suggests `phase_locked`'s period estimator finds nothing
+usable in these traces and falls back to its parent — so the table is one policy
+measured twice, not two policies agreeing. All the PDW-binning caveats above
+still apply.
 
 Reproduce with `smartscan external --subset scan --split test`. The report now
 records which subset produced it; an earlier run used `archive` and did not say
