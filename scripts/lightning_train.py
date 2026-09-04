@@ -212,7 +212,11 @@ def main() -> int:
                     help="Dataloader workers for --dataset. The CLI's own "
                          "auto-size caps at 8 however many cores exist, which "
                          "starves a data-bound run. Accepts a shell expression "
-                         "so the machine sizes it: '$(( $(nproc) - 4 ))'.")
+                         "so the machine sizes it. Guard the small case -- a "
+                         "single-T4 box has 4 vCPUs, where 'nproc - 4' is ZERO "
+                         "workers, i.e. the single-threaded decode that spent "
+                         "~14 h reaching teacher epoch 1 on Kaggle. Use "
+                         "'$(( $(nproc) > 3 ? $(nproc) - 2 : 2 ))'.")
     ap.add_argument("--tiers", default="medium,easy,hard",
                     help="Comma-separated tiers for --all-tiers, in order. Use a "
                          "subset to restage a tier the runtime cap cut off.")
