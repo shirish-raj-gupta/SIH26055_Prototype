@@ -231,6 +231,13 @@ def main() -> int:
     # not found"); T4 launches. The SDK exposes every machine name regardless of
     # entitlement, so availability is only ever known at submit time.
     ap.add_argument("--machine", default="T4")
+    ap.add_argument("--image", default=None,
+                    help="Run from this container image instead of a Studio. "
+                         "Studios have twice vanished from the teamspace mid-run "
+                         "-- jobs and studios both -- and Job.run needs one or "
+                         "the other, so an image removes a dependency that has "
+                         "already failed twice. A clean image also avoids the "
+                         "studio image's NumPy 1.x-compiled matplotlib.")
     ap.add_argument("--studio", default=None,
                     help="Studio supplying the environment. Job.run needs either "
                          "this or an image; with neither it tries to autodetect "
@@ -320,21 +327,29 @@ def main() -> int:
     # Fall back to whatever studio the teamspace actually has. Studios get
     # renamed and recreated in the UI, and hardcoding one turns an unrelated
     # rename into a failed submission.
-    available = ts.studios
-    if not available:
-        print("no studio in this teamspace; Job.run needs a studio or an image")
-        return 1
-    studio = next((s for s in available if s.name == args.studio), None) if args.studio else available[0]
-    if studio is None:
-        print(f"studio {args.studio!r} not found. Available: {[s.name for s in available]}")
-        return 1
-    print(f"  studio      {studio.name}")
+    studio = None
+    if not args.image:
+        available = ts.studios
+        if not available:
+            print("no studio in this teamspace, and no --image given; Job.run "
+                  "needs one or the other. Pass --image to skip studios.")
+            return 1
+        studio = (next((s for s in available if s.name == args.studio), None)
+                  if args.studio else available[0])
+        if studio is None:
+            print(f"studio {args.studio!r} not found. "
+                  f"Available: {[s.name for s in available]}")
+            return 1
+        print(f"  studio      {studio.name}")
+    else:
+        print(f"  image       {args.image}")
     machine = getattr(Machine, args.machine)
     job = Job.run(
         name=name,
         machine=machine,
         command=cmd,
         studio=studio,
+        image=args.image,
         teamspace=ts,
         interruptible=args.interruptible,
     )
