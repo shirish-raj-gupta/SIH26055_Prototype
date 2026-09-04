@@ -47,7 +47,8 @@ FULL_CORPUS = {"easy": 694, "medium": 854, "hard": 557}
 
 
 def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str,
-                           tiers: tuple[str, ...]) -> str:
+                           tiers: tuple[str, ...], dataset: str | None = None,
+                           workers: int = -1) -> str:
     """Compose a command that trains all three tiers CONCURRENTLY, one per GPU.
 
     Submitting three separate jobs would rent three machines. The dense corpus
@@ -69,6 +70,13 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
             single-tier path has no artifact persistence, and restaging there
             would silently reproduce the write-only run that lost the
             100-episode checkpoint.
+        dataset: Stream the published corpus from this path instead of
+            regenerating episodes densely in RAM. The dense path put 854
+            episodes of MEDIUM beyond 4.8 hours on 32 cores; streaming has no
+            RAM ceiling and reads the whole split.
+        workers: Dataloader workers. The streaming path is data-bound -- the
+            CLI's own note measures ~9.5 s/batch single-threaded against 27 ms
+            in memory -- so this matters more than the accelerator.
 
     Returns:
         A single shell command string.
@@ -99,6 +107,12 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
     lines += [
         f"mkdir -p {art} || true",
         "echo \"cores=$(nproc)\"",
+        # Per-tier copying protects a finished tier from a later failure. It
+        # does nothing DURING a tier, and medium ran 4.8 h inside one before
+        # being stopped with nothing saved. Sync whatever exists every 5 min.
+        f"( while true; do sleep 300;"
+        f" cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null;"
+        f" done ) & SYNC=$!",
     ]
     # SEQUENTIAL, not concurrent. `free -g` on DATA_PREP reports 247 GB total
     # and 241 available -- not the 768 the machine picker advertises. All three
@@ -107,11 +121,18 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
     # cores, and a tier that dies cannot take the others with it.
     # Medium first: it is the tier the dashboard and the docs actually quote.
     for i, tier in enumerate(tiers):
+        if dataset:
+            # --dataset reads the whole published split, so --episodes does not
+            # apply; the CLI errors if the corpus is missing rather than quietly
+            # regenerating from seeds.
+            source = f" --dataset {dataset} --workers {workers}"
+        else:
+            source = f" --episodes {FULL_CORPUS[tier]}"
         lines.append(
             f"OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc)"
             f" python -m smartscan.cli train"
             f" --what predictor --config configs/{tier}.yaml --arch {arch}"
-            f" --episodes {FULL_CORPUS[tier]} --windows-per-episode {wpe}{seed_arg}"
+            f"{source} --windows-per-episode {wpe}{seed_arg}"
             f" > {tier}.log 2>&1; R{i}=$?"
         )
         # Persist after each tier, so a later failure or a runtime cap cannot
@@ -126,6 +147,7 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
     # Copy BEFORE the exit-code test, so a tier that failed does not discard the
     # two that succeeded.
     lines += [
+        "kill $SYNC 2>/dev/null || true",
         f"cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null || true",
         f"cp -f {' '.join(t + '.log' for t in tiers)} {art}/ 2>/dev/null || true",
         f"echo '=== artifacts persisted ==='; ls -laR {art} || true",
@@ -171,6 +193,13 @@ def main() -> int:
     """Submit the job."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tier", default="medium")
+    ap.add_argument("--dataset", default=None,
+                    help="Stream the corpus from this path in the job (e.g. "
+                         "/teamspace/uploads/smartscan-dataset) instead of "
+                         "regenerating episodes in RAM.")
+    ap.add_argument("--workers", type=int, default=-1,
+                    help="Dataloader workers for --dataset. -1 auto-sizes, but "
+                         "the CLI caps auto at 8; set it explicitly on a big box.")
     ap.add_argument("--tiers", default="medium,easy,hard",
                     help="Comma-separated tiers for --all-tiers, in order. Use a "
                          "subset to restage a tier the runtime cap cut off.")
@@ -220,9 +249,12 @@ def main() -> int:
         gb = sum(FULL_CORPUS[t] for t in tiers) * scale
         name = args.name or f"predictor-full-corpus-{'-'.join(tiers)}"
         cmd = build_all_tiers_command(args.windows_per_episode, args.arch,
-                                      args.seed, name, tiers)
+                                      args.seed, name, tiers, args.dataset,
+                                      args.workers)
         corpus = " + ".join(f"{t} {FULL_CORPUS[t]}" for t in tiers)
         corpus += f" = {sum(FULL_CORPUS[t] for t in tiers)} episodes"
+        if args.dataset:
+            corpus += f"  [STREAMED from {args.dataset}]"
     else:
         gb = args.episodes * scale
         cmd = build_command(args.tier, args.episodes, args.windows_per_episode,
