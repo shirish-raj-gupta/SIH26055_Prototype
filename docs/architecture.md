@@ -998,3 +998,44 @@ The methodological point, since this is now the third instance: a single run of
 anything in this project is a hypothesis. sd 0.038 is what a run costs to
 believe.
 
+
+### N. Three ways a cloud training run produces nothing
+
+Full-corpus training was moved to Lightning once the local RAM ceiling (~40
+episodes) and Kaggle's data-bound loader had both been exhausted. Three
+failures came before a single episode was trained, and none of them was a
+modelling problem.
+
+**The jobs were write-only.** A 100-episode run on a T4 completed successfully
+and its checkpoint no longer exists. It wrote to `runs/checkpoints` relative to
+a working directory destroyed with the machine, and nothing in this repo could
+read a model back out of a job. Verified after the fact:
+`download_folder(job.artifact_path)` and `download_folder(job.snapshot_path)`
+both return zero files. Only the AUC numbers printed to its log survived, which
+is why that result was never replicated and never shipped. Jobs now copy
+checkpoints, ONNX exports and per-tier logs into `/teamspace/jobs/<name>/
+artifacts` after every tier, and `scripts/fetch_lightning_artifacts.py` reads
+them back.
+
+**The machine picker's RAM is not the kernel's RAM.** `DATA_PREP` is advertised
+as 768 GB. `free -g` on the running job reports 247 total and 241 available — a
+factor of three. The planned layout trained all three tiers concurrently, which
+needs ~360 GB of dense windows, and would have been OOM-killed part-way through
+a metered run. Tiers now run sequentially, largest first. The general form of
+this: on the GPU rows the advertised "Memory (GB)" is *VRAM*, on the CPU rows it
+is something that is not what `free` sees either, and the dense window corpus
+lives in host memory. Size the run from the machine's own report, and print that
+report before the first allocation.
+
+**A NumPy major version killed every process before our code ran.** The studio
+image ships matplotlib, pandas and scipy compiled against NumPy 1.x; smartscan
+requires `numpy>=2,<3`; and something in `site` startup imports matplotlib. The
+result was an `ImportError` on the NumPy 2.5.2 ABI in every interpreter the job
+started, including the ones meant to train. Pinning numpy down would violate the
+package's own requirement, so the dependents are rebuilt against NumPy 2 and the
+import is asserted before training begins — a failure that costs ninety seconds
+instead of an hour.
+
+The shared lesson is that a metered run should establish that its environment
+works and that its outputs can be retrieved *before* it starts computing.
+Each of these three cost real money to discover and nothing to prevent.
