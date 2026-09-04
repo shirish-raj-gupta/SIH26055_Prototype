@@ -74,6 +74,14 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
         # AFTER training has already succeeded and the job is marked Failed,
         # which reads as a training failure when it is not.
         f"pip install --quiet 'git+{REPO_URL}' onnx onnxruntime onnxscript || exit 1",
+        # The studio image ships matplotlib/pandas/scipy compiled against
+        # NumPy 1.x. smartscan requires numpy>=2, so installing it breaks their
+        # ABI, and something in site startup imports matplotlib -- so EVERY
+        # python process dies before running a line of our code. Pinning numpy
+        # down is not open to us; rebuild the dependents against numpy 2.
+        "pip install --quiet --upgrade matplotlib pandas scipy pyarrow || true",
+        "python -c 'import matplotlib, numpy; print(\"matplotlib\", "
+        "matplotlib.__version__, \"numpy\", numpy.__version__)' || exit 1",
         # Record the two numbers that decide whether this job can work at all.
         # The RAM figure is an ESTIMATE until a job prints it; capture it.
         "echo '=== host resources ==='",
@@ -84,38 +92,34 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
     ]
     lines += [
         f"mkdir -p {art} || true",
-        # Sync every 5 min, not just at the end: if the job hits its runtime cap
-        # the final copy never runs, and hours of training would be lost the way
-        # the 100-episode checkpoint was.
-        f"( while true; do cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null;"
-        f" sleep 300; done ) & SYNC=$!",
+        "echo \"cores=$(nproc)\"",
     ]
-    for gpu, (tier, episodes) in enumerate(FULL_CORPUS.items()):
-        # On a CPU machine every torch process otherwise grabs all cores, so
-        # three tiers oversubscribe 3x and thrash. Split the cores evenly.
-        # Harmless on a GPU box, where the work is not on the CPU anyway.
+    # SEQUENTIAL, not concurrent. `free -g` on DATA_PREP reports 247 GB total
+    # and 241 available -- not the 768 the machine picker advertises. All three
+    # tiers at once need ~360 GB and would have been OOM-killed. Run one at a
+    # time: each fits (medium, the largest, needs ~146 GB), each gets all the
+    # cores, and a tier that dies cannot take the others with it.
+    # Medium first: it is the tier the dashboard and the docs actually quote.
+    for i, tier in enumerate(("medium", "easy", "hard")):
         lines.append(
-            f"CUDA_VISIBLE_DEVICES={gpu}"
-            f" OMP_NUM_THREADS=$(( $(nproc) / {len(FULL_CORPUS)} ))"
-            f" MKL_NUM_THREADS=$(( $(nproc) / {len(FULL_CORPUS)} ))"
+            f"OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc)"
             f" python -m smartscan.cli train"
             f" --what predictor --config configs/{tier}.yaml --arch {arch}"
-            f" --episodes {episodes} --windows-per-episode {wpe}{seed_arg}"
-            f" > {tier}.log 2>&1 & P{gpu}=$!"
+            f" --episodes {FULL_CORPUS[tier]} --windows-per-episode {wpe}{seed_arg}"
+            f" > {tier}.log 2>&1; R{i}=$?"
         )
-    # `wait` with no arguments always returns 0, so a failed tier would be
-    # reported as a successful job. Wait on each PID and keep its status.
-    for gpu, tier in enumerate(FULL_CORPUS):
-        lines.append(f"wait $P{gpu}; R{gpu}=$?")
-    for gpu, tier in enumerate(FULL_CORPUS):
-        lines.append(f"echo '=== {tier} (exit '$R{gpu}') ==='; tail -n 40 {tier}.log")
+        # Persist after each tier, so a later failure or a runtime cap cannot
+        # cost an earlier tier's model.
+        lines.append(f"cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null || true")
+        lines.append(f"echo \"--- {tier} finished, exit $R{i} ---\"")
+    for i, tier in enumerate(("medium", "easy", "hard")):
+        lines.append(f"echo '=== {tier} (exit '$R{i}') ==='; tail -n 40 {tier}.log")
     # Export is best-effort: a failed export must not mask a trained model.
     for tier in FULL_CORPUS:
         lines.append(f"python -m smartscan.cli export-onnx --config configs/{tier}.yaml || true")
     # Copy BEFORE the exit-code test, so a tier that failed does not discard the
     # two that succeeded.
     lines += [
-        "kill $SYNC 2>/dev/null || true",
         f"cp -r runs/checkpoints runs/onnx {art}/ 2>/dev/null || true",
         f"cp -f easy.log medium.log hard.log {art}/ 2>/dev/null || true",
         f"echo '=== artifacts persisted ==='; ls -laR {art} || true",
