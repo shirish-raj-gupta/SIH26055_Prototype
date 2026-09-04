@@ -40,7 +40,7 @@ REPO_URL = "https://github.com/shirish-raj-gupta/SIH26055_Prototype.git"
 MB_PER_EPISODE = 105
 
 
-def build_command(tier: str, episodes: int, wpe: int, arch: str) -> str:
+def build_command(tier: str, episodes: int, wpe: int, arch: str, seed: int | None) -> str:
     """Compose the remote shell command.
 
     Args:
@@ -48,18 +48,24 @@ def build_command(tier: str, episodes: int, wpe: int, arch: str) -> str:
         episodes: Training episodes.
         wpe: Windows drawn per episode.
         arch: Predictor architecture.
+        seed: Run seed, which selects a DISJOINT block of training episodes.
+            Replication needs independent draws, not a rerun of one.
 
     Returns:
         A single shell command string.
     """
+    seed_arg = f" --set run.seed={seed}" if seed is not None else ""
     return " && ".join([
-        f"pip install --quiet 'git+{REPO_URL}'",
+        # onnx is not in the studio image; without it the export step fails
+        # AFTER training has already succeeded and the job is marked Failed,
+        # which reads as a training failure when it is not.
+        f"pip install --quiet 'git+{REPO_URL}' onnx onnxruntime onnxscript",
         "python -c \"import torch; print('torch', torch.__version__, "
         "'cuda', torch.cuda.is_available())\"",
         (
             "python -m smartscan.cli train --what predictor"
             f" --config configs/{tier}.yaml --arch {arch}"
-            f" --episodes {episodes} --windows-per-episode {wpe}"
+            f" --episodes {episodes} --windows-per-episode {wpe}{seed_arg}"
         ),
         f"python -m smartscan.cli export-onnx --config configs/{tier}.yaml",
         "ls -la runs/checkpoints runs/onnx",
@@ -82,6 +88,9 @@ def main() -> int:
                          "this or an image; with neither it tries to autodetect "
                          "and fails with 'Cannot autodetect Studio'.")
     ap.add_argument("--name", default=None)
+    ap.add_argument("--seed", type=int, default=None,
+                    help="Run seed. Different seeds draw disjoint episode blocks, "
+                         "which is what makes repeats independent.")
     ap.add_argument("--max-runtime", type=int, default=3600,
                     help="Seconds. A cap is not optional on metered compute.")
     ap.add_argument("--dry-run", action="store_true")
@@ -96,7 +105,8 @@ def main() -> int:
         return 1
 
     gb = args.episodes * args.windows_per_episode / 400 * MB_PER_EPISODE / 1024
-    cmd = build_command(args.tier, args.episodes, args.windows_per_episode, args.arch)
+    cmd = build_command(args.tier, args.episodes, args.windows_per_episode,
+                        args.arch, args.seed)
     name = args.name or f"smartscan-predictor-{args.tier}-{args.episodes}ep"
 
     print(f"  teamspace   default-project (user {st.lightning_user[:8]}…, key {st.lightning_key_fingerprint})")
