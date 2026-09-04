@@ -128,6 +128,10 @@ class CredentialStatus:
         huggingface: Whether an HF token is present.
         hf_source: Where it came from.
         hf_token_fingerprint: Fingerprint of the token.
+        lightning: Whether Lightning AI credentials are present.
+        lightning_source: Where they came from.
+        lightning_user: The Lightning user id (not a secret).
+        lightning_key_fingerprint: Fingerprint of the key, never the key.
         dotenv_loaded: Keys applied from ``.env``.
     """
 
@@ -138,6 +142,10 @@ class CredentialStatus:
     huggingface: bool
     hf_source: str
     hf_token_fingerprint: str
+    lightning: bool = False
+    lightning_source: str = "none"
+    lightning_user: str = ""
+    lightning_key_fingerprint: str = "-"
     dotenv_loaded: tuple[str, ...] = ()
 
     def report(self) -> str:
@@ -229,6 +237,30 @@ def credential_status(dotenv: str | Path | None = ".env") -> CredentialStatus:
             hf = cached.read_text(encoding="utf-8").strip()
             hf_source = str(cached)
 
+    # Lightning AI. The SDK reads LIGHTNING_USER_ID and LIGHTNING_API_KEY from
+    # the environment, or a credentials file written by `lightning login`.
+    lit_user = os.environ.get("LIGHTNING_USER_ID", "")
+    lit_key = os.environ.get("LIGHTNING_API_KEY", "")
+    lit_source = "environment" if (lit_user and lit_key) else "none"
+    if not (lit_user and lit_key):
+        cred = Path.home() / ".lightning" / "credentials.json"
+        if cred.is_file():
+            try:
+                import json
+
+                blob = json.loads(cred.read_text(encoding="utf-8"))
+                lit_user = lit_user or blob.get("user_id", "")
+                lit_key = lit_key or blob.get("api_key", "")
+                lit_source = str(cred)
+            except (OSError, ValueError):
+                lit_source = f"{cred} (unreadable)"
+
+    valid_lightning = (
+        bool(lit_user and lit_key)
+        and lit_user not in _PLACEHOLDERS
+        and lit_key not in _PLACEHOLDERS
+    )
+
     valid_kaggle = bool(user and key) and user not in _PLACEHOLDERS and key not in _PLACEHOLDERS
     valid_hf = bool(hf) and hf not in _PLACEHOLDERS
 
@@ -237,6 +269,10 @@ def credential_status(dotenv: str | Path | None = ".env") -> CredentialStatus:
         kaggle_source=kaggle_source if valid_kaggle else "none",
         kaggle_user=user if valid_kaggle else "",
         kaggle_key_fingerprint=fingerprint(key) if valid_kaggle else "-",
+        lightning=valid_lightning,
+        lightning_source=lit_source if valid_lightning else "none",
+        lightning_user=lit_user if valid_lightning else "",
+        lightning_key_fingerprint=fingerprint(lit_key) if valid_lightning else "-",
         huggingface=valid_hf,
         hf_source=hf_source if valid_hf else "none",
         hf_token_fingerprint=fingerprint(hf) if valid_hf else "-",
