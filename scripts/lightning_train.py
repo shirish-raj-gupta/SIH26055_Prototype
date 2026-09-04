@@ -39,6 +39,67 @@ REPO_URL = "https://github.com/shirish-raj-gupta/SIH26055_Prototype.git"
 #: Roughly what the dense window corpus costs, from the local measurement.
 MB_PER_EPISODE = 105
 
+#: Train-split size of the published corpus, per tier, from
+#: ``build/dataset/build_report.json`` (2105 train episodes of 3000 total).
+#: These are the counts that make "the full corpus" a definite quantity
+#: rather than a round number someone picked.
+FULL_CORPUS = {"easy": 694, "medium": 854, "hard": 557}
+
+
+def build_all_tiers_command(wpe: int, arch: str, seed: int | None) -> str:
+    """Compose a command that trains all three tiers CONCURRENTLY, one per GPU.
+
+    Submitting three separate jobs would rent three machines. The dense corpus
+    for all three tiers together is ~216 GB, which fits one 8x L4 box (~499 GB
+    available) with room to spare, so one machine does the whole job at a third
+    of the price and a third of the wall-clock.
+
+    Each tier is pinned to its own GPU with ``CUDA_VISIBLE_DEVICES``; without
+    the pin all three land on cuda:0 and contend for 24 GB of VRAM.
+
+    Args:
+        wpe: Windows drawn per episode.
+        arch: Predictor architecture.
+        seed: Run seed, or None to leave the config default.
+
+    Returns:
+        A single shell command string.
+    """
+    seed_arg = f" --set run.seed={seed}" if seed is not None else ""
+    lines = [
+        # onnx is not in the studio image; without it the export step fails
+        # AFTER training has already succeeded and the job is marked Failed,
+        # which reads as a training failure when it is not.
+        f"pip install --quiet 'git+{REPO_URL}' onnx onnxruntime onnxscript || exit 1",
+        # Record the two numbers that decide whether this job can work at all.
+        # The RAM figure is an ESTIMATE until a job prints it; capture it.
+        "echo '=== host resources ==='",
+        "free -g || true",
+        "nvidia-smi --query-gpu=index,name,memory.total --format=csv || true",
+        "python -c \"import torch; print('torch', torch.__version__, "
+        "'cuda', torch.cuda.is_available(), 'devices', torch.cuda.device_count())\"",
+    ]
+    for gpu, (tier, episodes) in enumerate(FULL_CORPUS.items()):
+        lines.append(
+            f"CUDA_VISIBLE_DEVICES={gpu} python -m smartscan.cli train"
+            f" --what predictor --config configs/{tier}.yaml --arch {arch}"
+            f" --episodes {episodes} --windows-per-episode {wpe}{seed_arg}"
+            f" > {tier}.log 2>&1 & P{gpu}=$!"
+        )
+    # `wait` with no arguments always returns 0, so a failed tier would be
+    # reported as a successful job. Wait on each PID and keep its status.
+    for gpu, tier in enumerate(FULL_CORPUS):
+        lines.append(f"wait $P{gpu}; R{gpu}=$?")
+    for gpu, tier in enumerate(FULL_CORPUS):
+        lines.append(f"echo '=== {tier} (exit '$R{gpu}') ==='; tail -n 40 {tier}.log")
+    # Export is best-effort: a failed export must not mask a trained model.
+    for tier in FULL_CORPUS:
+        lines.append(f"python -m smartscan.cli export-onnx --config configs/{tier}.yaml || true")
+    lines.append("ls -la runs/checkpoints runs/onnx || true")
+    # Make the JOB status mean "all three tiers trained".
+    lines.append("test $R0 -eq 0 -a $R1 -eq 0 -a $R2 -eq 0")
+    return " && ".join(lines[:1]) + " ; " + " ; ".join(lines[1:])
+
 
 def build_command(tier: str, episodes: int, wpe: int, arch: str, seed: int | None) -> str:
     """Compose the remote shell command.
@@ -76,12 +137,20 @@ def main() -> int:
     """Submit the job."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tier", default="medium")
+    ap.add_argument("--all-tiers", action="store_true",
+                    help="Train easy+medium+hard on the FULL published train "
+                         "split (694/854/557 episodes), concurrently on one "
+                         "machine, one tier per GPU. Overrides --tier/--episodes.")
+    ap.add_argument("--interruptible", action="store_true",
+                    help="Cheaper, but preemptible. Off by default for "
+                         "full-corpus runs: losing hours of a metered job to a "
+                         "preemption costs more than the discount saves.")
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--windows-per-episode", type=int, default=400)
     ap.add_argument("--arch", default="transformer")
-    # A100/L4 are rejected on this account's AWS cluster ("accelerator lit-a100-1
-    # not found"); T4 and the CPU_X_* tiers are what actually launch. Probed, not
-    # assumed -- the SDK exposes every machine name regardless of entitlement.
+    # A100 is rejected on this account's AWS cluster ("accelerator lit-a100-1
+    # not found"); T4 launches. The SDK exposes every machine name regardless of
+    # entitlement, so availability is only ever known at submit time.
     ap.add_argument("--machine", default="T4")
     ap.add_argument("--studio", default=None,
                     help="Studio supplying the environment. Job.run needs either "
@@ -104,17 +173,31 @@ def main() -> int:
         print("LIGHTNING_USERNAME and LIGHTNING_TEAMSPACE in .env — see .env.example.")
         return 1
 
-    gb = args.episodes * args.windows_per_episode / 400 * MB_PER_EPISODE / 1024
-    cmd = build_command(args.tier, args.episodes, args.windows_per_episode,
-                        args.arch, args.seed)
-    name = args.name or f"smartscan-predictor-{args.tier}-{args.episodes}ep"
+    scale = args.windows_per_episode / 400 * MB_PER_EPISODE / 1024
+    if args.all_tiers:
+        gb = sum(FULL_CORPUS.values()) * scale
+        cmd = build_all_tiers_command(args.windows_per_episode, args.arch, args.seed)
+        name = args.name or "predictor-full-corpus-3tier"
+        corpus = " + ".join(f"{t} {n}" for t, n in FULL_CORPUS.items())
+        corpus += f" = {sum(FULL_CORPUS.values())} episodes (full train split)"
+    else:
+        gb = args.episodes * scale
+        cmd = build_command(args.tier, args.episodes, args.windows_per_episode,
+                            args.arch, args.seed)
+        name = args.name or f"smartscan-predictor-{args.tier}-{args.episodes}ep"
+        corpus = f"{args.episodes} episodes x {args.windows_per_episode} windows"
 
-    print(f"  teamspace   default-project (user {st.lightning_user[:8]}…, key {st.lightning_key_fingerprint})")
+    import os as _os
+
+    ts_name = _os.environ.get("LIGHTNING_TEAMSPACE", "default-project")
+    print(f"  teamspace   {ts_name} (user {st.lightning_user[:8]}…, "
+          f"key {st.lightning_key_fingerprint})")
     print(f"  machine     {args.machine}")
     print(f"  job         {name}")
-    print(f"  corpus      {args.episodes} episodes x {args.windows_per_episode} windows")
-    print(f"  dense RAM   ~{gb:.1f} GB   (local ceiling was ~40 episodes)")
-    print(f"  max runtime {args.max_runtime}s")
+    print(f"  corpus      {corpus}")
+    print(f"  dense RAM   ~{gb:.1f} GB peak   (local ceiling was ~40 episodes)")
+    print(f"  max runtime {args.max_runtime}s"
+          f"  -> up to ${args.max_runtime / 3600 * 15.90:.2f} at L4x8 on-demand")
     print(f"\n  command:\n    {cmd}\n")
     if args.dry_run:
         print("--dry-run: nothing submitted.")
@@ -151,7 +234,7 @@ def main() -> int:
         command=cmd,
         studio=studio,
         teamspace=ts,
-        interruptible=True,   # cheaper, and this job is restartable by design
+        interruptible=args.interruptible,
     )
     print(f"submitted: {job.name}")
     print(f"status   : {job.status}")
