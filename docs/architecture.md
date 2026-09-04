@@ -1017,9 +1017,11 @@ checkpoints, ONNX exports and per-tier logs into `/teamspace/jobs/<name>/
 artifacts` after every tier, and `scripts/fetch_lightning_artifacts.py` reads
 them back.
 
-**The machine picker's RAM is not the kernel's RAM.** `DATA_PREP` is advertised
-as 768 GB. `free -g` on the running job reports 247 total and 241 available — a
-factor of three. The planned layout trained all three tiers concurrently, which
+**The machine picker's numbers are not the kernel's numbers.** `DATA_PREP` is
+advertised as 768 GB and 96 CPUs. The running job reports `Mem: 247` total, 241
+available, and `cores=32` — a factor of three short on *both* axes, which also
+means a runtime cap sized from the advertised core count is three times too
+optimistic. The planned layout trained all three tiers concurrently, which
 needs ~360 GB of dense windows, and would have been OOM-killed part-way through
 a metered run. Tiers now run sequentially, largest first. The general form of
 this: on the GPU rows the advertised "Memory (GB)" is *VRAM*, on the CPU rows it
@@ -1039,3 +1041,14 @@ instead of an hour.
 The shared lesson is that a metered run should establish that its environment
 works and that its outputs can be retrieved *before* it starts computing.
 Each of these three cost real money to discover and nothing to prevent.
+
+A fourth lesson is about diagnosis rather than the runs. `Job.logs` from the SDK
+lagged the job badly — it sat at ten lines, showing nothing past `Setup
+finished`, while the job's downloadable log already contained the full output
+including the passing NumPy gate and the `cores=32` line. Reasoning from
+`Job.logs` produced two confident and wrong conclusions: that the job was still
+installing packages an hour after it had started training, and that the platform
+does not stream logs at all. Neither was true. The job's own log download is the
+record; `Job.logs` is a lagging convenience, and the absence of a line in it is
+not evidence that the step did not run. The same applies to inferring state from
+whether a directory appears in the Drive UI.
