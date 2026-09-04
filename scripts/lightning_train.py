@@ -104,6 +104,17 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
         "python -c \"import torch; print('torch', torch.__version__, "
         "'cuda', torch.cuda.is_available(), 'devices', torch.cuda.device_count())\"",
     ]
+    if dataset and dataset.endswith(".tar"):
+        # Uploading the corpus as 9004 separate files ran at ~15 files/min --
+        # a 10-hour upload. One archive took 271 s. Unpack it onto local disk;
+        # reading 9004 small files over the teamspace mount during training
+        # would reintroduce the same per-file latency the archive avoided.
+        lines += [
+            "mkdir -p /tmp/ds",
+            f"tar -xf {dataset} -C /tmp/ds || exit 1",
+            "ls /tmp/ds/dataset | head",
+        ]
+        dataset = "/tmp/ds/dataset"
     lines += [
         f"mkdir -p {art} || true",
         "echo \"cores=$(nproc)\"",
