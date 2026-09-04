@@ -48,7 +48,7 @@ FULL_CORPUS = {"easy": 694, "medium": 854, "hard": 557}
 
 def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str,
                            tiers: tuple[str, ...], dataset: str | None = None,
-                           workers: int = -1) -> str:
+                           workers: str = "-1") -> str:
     """Compose a command that trains all three tiers CONCURRENTLY, one per GPU.
 
     Submitting three separate jobs would rent three machines. The dense corpus
@@ -208,9 +208,11 @@ def main() -> int:
                     help="Stream the corpus from this path in the job (e.g. "
                          "/teamspace/uploads/smartscan-dataset) instead of "
                          "regenerating episodes in RAM.")
-    ap.add_argument("--workers", type=int, default=-1,
-                    help="Dataloader workers for --dataset. -1 auto-sizes, but "
-                         "the CLI caps auto at 8; set it explicitly on a big box.")
+    ap.add_argument("--workers", default="-1",
+                    help="Dataloader workers for --dataset. The CLI's own "
+                         "auto-size caps at 8 however many cores exist, which "
+                         "starves a data-bound run. Accepts a shell expression "
+                         "so the machine sizes it: '$(( $(nproc) - 4 ))'.")
     ap.add_argument("--tiers", default="medium,easy,hard",
                     help="Comma-separated tiers for --all-tiers, in order. Use a "
                          "subset to restage a tier the runtime cap cut off.")
