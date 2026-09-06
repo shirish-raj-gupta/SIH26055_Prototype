@@ -1,4 +1,4 @@
-"""SmartScan live demo — a judge has five minutes and no briefing.
+"""ANVESHAK live demo — a judge has five minutes and no briefing.
 
     make demo        # or: streamlit run dashboard/app.py
 
@@ -372,7 +372,7 @@ def _render_reasoning(track: Track, cfg: Config) -> None:
 # --------------------------------------------------------------------------- #
 def main() -> None:
     """Entry point for ``streamlit run dashboard/app.py``."""
-    st.set_page_config(page_title="SmartScan — EW receiver scheduler",
+    st.set_page_config(page_title="ANVESHAK — EW receiver scheduler",
                        layout="wide", initial_sidebar_state="expanded")
 
     st.markdown(
@@ -387,7 +387,7 @@ def main() -> None:
 
     # ---------------- sidebar ---------------- #
     with st.sidebar:
-        st.title("SmartScan")
+        st.title("ANVESHAK")
         st.caption("Closed-loop ES receiver scheduling · SIH 26055")
 
         tier = st.selectbox("Scenario tier", ["easy", "medium", "hard"], index=1)
