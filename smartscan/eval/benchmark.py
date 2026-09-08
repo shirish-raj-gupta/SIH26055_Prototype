@@ -151,6 +151,14 @@ class BenchmarkResult:
             "config_hash": self.config_hash,
             "rows": [{k: v for k, v in r.items() if not k.startswith("_")} for r in self.rows],
             "comparisons": [asdict(c) for c in self.comparisons],
+            # The log-rank table is the result the project actually reports:
+            # it is what shows the TWIR ranking to be close to inverted once
+            # never-intercepted emitters are kept as censored observations
+            # rather than dropped. Omitting it here meant the headline finding
+            # could not be regenerated from anything on disk -- only the
+            # bootstrap table it overturns could.
+            "logrank": self.logrank or {},
+            "withheld": [list(w) for w in (self.withheld or [])],
         }
         p.write_text(json.dumps(payload, indent=2, default=float), encoding="utf-8")
         return p
