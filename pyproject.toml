@@ -22,7 +22,13 @@ classifiers = [
 # Core runtime: deliberately small so a judge can `pip install -e .` and run the
 # analytic schedulers, the environment and the full benchmark with no ML stack.
 dependencies = [
-  "numpy>=2.0,<3",
+  # >=1.26 rather than >=2.0: a scan of this package finds no NumPy 2.0-only
+  # API and no alias removed in 2.0, so the code runs on either major
+  # version. The tighter pin bought nothing and cost real installs --
+  # Deepnote, Colab and Kaggle images ship 1.26, and demanding 2.x there
+  # makes pip either fail or drag the whole image forward and break its
+  # own packages.
+  "numpy>=1.26,<3",
   "scipy>=1.13,<2",
   "pyyaml>=6.0,<7",
   "pydantic>=2.7,<3",
