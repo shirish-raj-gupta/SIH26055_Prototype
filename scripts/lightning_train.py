@@ -87,7 +87,13 @@ def build_all_tiers_command(wpe: int, arch: str, seed: int | None, job_name: str
         # onnx is not in the studio image; without it the export step fails
         # AFTER training has already succeeded and the job is marked Failed,
         # which reads as a training failure when it is not.
-        f"pip install --quiet 'git+{REPO_URL}' onnx onnxruntime onnxscript || exit 1",
+        # torch and gymnasium live in the `ml` extra, pandas/pyarrow/matplotlib
+        # in `viz` -- a bare `git+URL` install gets NEITHER. That went unnoticed
+        # because the Lightning studio image ships torch already; on any image
+        # that does not, training dies with ModuleNotFoundError after the
+        # install appears to succeed. Name the extras.
+        f"pip install --quiet 'smartscan[ml,viz] @ git+{REPO_URL}'"
+        f" onnx onnxruntime onnxscript || exit 1",
         # The studio image ships matplotlib/pandas/scipy compiled against
         # NumPy 1.x. smartscan requires numpy>=2, so installing it breaks their
         # ABI, and something in site startup imports matplotlib -- so EVERY
