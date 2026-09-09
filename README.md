@@ -96,8 +96,8 @@ Paired bootstrap CIs, Wilcoxon signed-rank, Holm-Bonferroni corrected.
 | Scheduler | vs tuned sweep | 95 % CI | p (Holm) | effect size |
 |---|---|---|---|---|
 | `epsilon_greedy` | **+305.0 %** | [+209.7 %, +465.6 %] | 1.9e-07 | +1.00 |
-| `predictor` | **+159.3 %** | [+75.3 %, +347.4 %] | 2.4e-05 | +0.94 |
-| `hybrid` | **+118.6 %** | [+58.9 %, +199.4 %] | 2.9e-04 | +0.87 |
+| `predictor` | **+195.3 %** | [+145.0 %, +397.0 %] | 1.9e-07 | +1.00 |
+| `hybrid` | **+123.2 %** | [+45.8 %, +222.3 %] | 4.6e-04 | +0.86 |
 | `thompson` | **+96.6 %** | [+36.5 %, +237.5 %] | 1.6e-05 | +0.94 |
 | `phase_locked` | **+76.5 %** | [+38.0 %, +145.2 %] | 1.5e-04 | +0.89 |
 | `dqn` | **+73.2 %** | [+35.0 %, +145.3 %] | 2.2e-04 | +0.88 |
@@ -168,19 +168,29 @@ A **log-rank test** keeps them, as right-censored observations. MEDIUM, 30 seeds
 | `sequential` (baseline) | — | 1.000 | — | 68 / 146 |
 | `ucb1` | −9 % | 1.061 | 0.45 | 64 / 146 |
 | `dqn` | +73 % | 0.989 | 0.89 | 70 / 146 |
-| `hybrid` | +119 % | 0.777 | 8.6e-03 | 94 / 146 |
+| `hybrid` | +123 % | 0.773 | 5.7e-03 | 92 / 146 |
 | `thompson` | +97 % | 0.682 | 1.8e-04 | 102 / 146 |
-| `predictor` | +159 % | 0.536 | 1.7e-08 | 112 / 146 |
 | `epsilon_greedy` | **+305 %** | **0.513** | **1.2e-08** | **115** / 146 |
+| `predictor` | +195 % | **0.362** | **5.5e-13** | **126** / 146 |
 
 Hazard ratio > 1 means the policy intercepts faster than the tuned sweep.
 
-**The ranking is close to inverted.** `epsilon_greedy`, the +305 % headline,
-misses **115 of 146** scanning and agile emitters against the sweep's 68, at a
-hazard ratio of 0.513 with p = 1.2e-08. `predictor` and `thompson` do the same
-thing less severely. They are not better schedulers; they are policies that
-found the cheap emitters and abandoned the expensive ones — and the expensive
-ones are the problem statement.
+**The ranking is fully inverted.** `predictor` posts the second-best TWIR at
++195 % and the **worst** hard-target record in the table: it never intercepts
+**126 of 146** scanning and agile emitters, against the sweep's 68, at a hazard
+ratio of 0.362 with p = 5.5e-13. `epsilon_greedy` misses 115, `thompson` 102.
+They are not better schedulers; they are policies that found the cheap emitters
+and abandoned the expensive ones — and the expensive ones are the problem
+statement.
+
+The predictor makes the point sharpest, because it is the one component that
+was *improved* between runs. Retraining lifted its ranking quality (AUC
+0.683 → 0.763) and its TWIR (+159 % → +195 %), and over the same 30 seeds its
+hard-target performance got **worse**: hazard 0.536 → 0.362, never-intercepted
+112 → 126. Every policy that does not consume predictor weights is unchanged to
+the digit across the two runs, so this is the predictor's doing and not drift.
+A better occupancy model bought a better score on the flattering metric and
+paid for it in the metric that matches the mission.
 
 ### So what is the result?
 
@@ -634,24 +644,61 @@ Stated because they are the first things a reviewer should ask about.
    leaving part of the band unvisited throughout. Their interception gains are
    bought by abandoning coverage, which is a failure of the reward function as
    a proxy for the mission rather than a training bug.
-5. **The predictors saw ~5 % of the available data — and it does not appear to
-   matter.** Each was trained on ~40 episodes regenerated from seeds; the
-   published corpus holds 854 train episodes for MEDIUM alone.
+5. **More episodes did help — the corpus itself is still untouched.** This
+   entry used to read "the predictors saw ~5 % of the available data, and it
+   does not appear to matter". The second half of that no longer holds. The
+   shipped checkpoints are retrained on a larger seed-regenerated episode count
+   and score materially higher on every tier. The first half still holds
+   exactly as written: training still regenerates episodes from seeds and still
+   never reads the published corpus, which holds 854 train episodes for MEDIUM
+   alone.
 
-   That gap was worth testing and was tested. Four independent draws of the same
-   recipe on disjoint episode blocks give AUC 0.685, 0.673, 0.736, 0.644 —
-   **mean 0.684, sd 0.038** — against the shipped 0.683. So the run-to-run
-   spread is ±0.038, and a single-run difference between two predictors has to
-   clear roughly 0.08 before it carries any information. Corpus variations of
-   12,400 vs 16,000 windows sit far inside that. An earlier single run returned
-   0.767 and looked like a 12 % improvement; it is above the maximum of all four
-   repeats, and was an upper-tail draw rather than a better recipe.
-
-   The same measurement identifies the difference that *is* real:
-   `predictor_easy` at 0.911 against MEDIUM's 0.683 is about six standard
-   deviations. **That is tier difficulty, not corpus size** — consistent with
-   easy reaching 0.911 from the smallest corpus of the three. Reproduce with
+   The original measurement stands, and its scope is the point. Four
+   independent draws of the 31×400 seed-regenerated recipe on disjoint episode
+   blocks give AUC 0.685, 0.673, 0.736, 0.644 — **mean 0.684, sd 0.038**. So
+   *within that recipe* the run-to-run spread is ±0.038, and a single-run
+   difference has to clear roughly 0.08 before it carries information. Every
+   variation it tested held the window budget near 12,400, so what it retired
+   was the 12,400-vs-16,000 question, not the corpus question. Reproduce with
    `python scripts/replicate_predictor.py`.
+
+   Raising the episode count clears that bar. MEDIUM goes 0.683 → 0.763, a gain
+   of +0.080 against a bar of 0.08, with EASY at 0.911 → 0.957 and HARD at
+   0.673 → 0.703 moving the same way but staying inside the noise individually.
+   Three MEDIUM checkpoints from that session score 0.7627, 0.7619 and 0.7634.
+
+   The evidence that this is not another upper-tail draw is the **teacher**,
+   which improves on all three tiers alongside the student (MEDIUM AUC
+   0.637 → 0.728, AP 0.223 → 0.405). A student-side seed draw cannot move the
+   teacher, so something upstream of the student genuinely changed. Downstream
+   the gain survives to the mission metric: see the threat-weighted
+   interception numbers in the results section.
+
+   The recipe is `--episodes 300 --windows-per-episode 200`: 60,000 training
+   windows against the 12,400 of the measurement above, and 300 episodes
+   against 31. It still regenerates from seeds and still never reads the
+   published corpus.
+
+   **The spread has now been measured at this recipe**, because the 0.08 bar
+   above belongs to a different one and could not settle the question. Six
+   MEDIUM draws on verified-disjoint episode blocks give AUC 0.7598, 0.7641,
+   0.7597, 0.7718, 0.7634, 0.7627 — **mean 0.7636, sd 0.0044**. The bar at
+   300×200 is therefore 2 sd = **0.0089**, and the gap over the incumbent is
+   **+0.081**: it clears its own bar by a factor of nine, not by a hair. Run
+   `scripts/replicate_predictor.py` with `N_EP, WPE = 300, 200` to reproduce.
+
+   Verifying disjointness matters more than it sounds. Training episodes are
+   `range(run.seed + 1000, run.seed + 1000 + episodes)`, so at 300 episodes two
+   seeds are independent only if they differ by at least 300. An earlier pair,
+   20260101 and 20260202, differ by 101 and therefore shared **199 of their 300
+   episodes**; read as replicates they made the recipe look 51× tighter than
+   the 31×400 one. Measured over genuinely disjoint blocks the honest figure
+   is **9× tighter**, which is close to what the extra data buys and is the
+   number quoted above.
+
+   The difference the original measurement identified is still real and still
+   tier difficulty rather than corpus size: `predictor_easy` reaches 0.957 from
+   the smallest corpus of the three.
 6. **RL has not been trained to convergence** (§17-B, §21-G).
 7. **Sector-scan period estimates are ambiguous by a factor of 2.** A
    bidirectional sweep genuinely illuminates twice per frame.

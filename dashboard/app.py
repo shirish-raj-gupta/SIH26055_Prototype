@@ -74,7 +74,9 @@ AGENT_LABELS: dict[str, str] = {
     # untrained agent silently substitutes an analytic policy, so the demo would
     # have shown UCB1 wearing another name. All twelve are trained now, so they
     # belong on stage: `predictor` is the second-strongest agent on
-    # threat-weighted interception (+159 % over the tuned sweep at 30 seeds).
+    # threat-weighted interception (+195 % over the tuned sweep at 30 seeds) --
+    # though see the log-rank table in the README: on hard-class emitters it is
+    # the WORST policy measured, missing 126 of 146.
     "predictor": "Occupancy predictor (transformer)",
     "dqn": "Double-DQN (duelling, masked)",
     "ppo": "PPO (from scratch)",

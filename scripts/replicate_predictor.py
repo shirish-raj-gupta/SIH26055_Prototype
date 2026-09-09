@@ -7,14 +7,41 @@ of all four repeats: an upper-tail draw, not an improvement.
 
 The number worth keeping is the SPREAD. sd 0.038 means a single-run difference
 between two predictors has to clear roughly 0.08 before it means anything. That
-retires the "more/better data" question for this tier: the 12,400-vs-16,000
-window comparison is far inside the noise, and so was the diversity sweep
-(31x400 -> 0.767, 62x200 -> 0.696, 97x128 -> 0.733 all came from one run each).
+retires the 12,400-vs-16,000 window comparison, which is far inside the noise,
+and the diversity sweep with it (31x400 -> 0.767, 62x200 -> 0.696, 97x128 ->
+0.733 all came from one run each).
 
-It also confirms which difference IS real: predictor_easy at 0.911 against
-medium at 0.683 is a six-sigma gap, so that is tier difficulty rather than
-corpus size -- which is what the easy tier reaching 0.911 from the SMALLEST
-corpus already suggested.
+SUPERSEDED IN PART: this script once read that as retiring the "more/better
+data" question outright. It does not, and the scope is why -- every variation
+measured here holds the window budget near 12,400, so it can only speak about
+redistributing a fixed budget, not about enlarging it.
+
+Retraining at a larger (unrecorded) seed-regenerated episode count moved MEDIUM
+0.683 -> 0.763, clearing the +0.08 bar this script set, with EASY 0.911 -> 0.957
+and HARD 0.673 -> 0.703 moving the same way but staying inside it. The
+corroboration is the TEACHER, which improves on all three tiers: the four
+repeats above vary only the student's draw, so a moved teacher is outside what
+this measurement can produce, and that is what distinguishes the result from the
+0.767 upper-tail draw.
+
+MEASURED AT 300x200. Six draws on verified-disjoint blocks give AUC 0.7598,
+0.7641, 0.7597, 0.7718, 0.7634, 0.7627 -- mean 0.7636, sd 0.0044. The bar at
+that recipe is 2 sd = 0.0089 and the gap over the incumbent is +0.081, so it
+clears its own bar ninefold. Set N_EP, WPE = 300, 200 to reproduce.
+
+DISJOINTNESS IS NOT AUTOMATIC. Episodes are range(seed+1000, seed+1000+N_EP),
+so seeds must differ by at least N_EP. An earlier pair differing by 101 at 300
+episodes shared 199 of 300 and, read as replicates, made the recipe look 51x
+tighter than 31x400; the honest figure over disjoint blocks is 9x. The `rep*137`
+spacing below is safe only because 137 > N_EP = 31 -- raise N_EP and it is not.
+
+What stays true is the measurement itself: within the 31x400 recipe the spread
+really is sd 0.038.
+
+It also confirms which difference IS real: predictor_easy at 0.957 against
+medium at 0.763 is far outside the spread, so that is tier difficulty rather than
+corpus size -- which is what the easy tier reaching the project's best AUC from
+the SMALLEST corpus already suggested.
 
 One run each is what produced the two findings this project has already had to
 retract, so the candidate is repeated over DISJOINT episode blocks. The shipped

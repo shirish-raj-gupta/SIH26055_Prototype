@@ -17,10 +17,24 @@ they are scientifically equivalent for the "does more data help" question, and
 it means no Kaggle credential has to travel to a cloud job.
 
 Set expectations honestly before spending anything. The predictor's run-to-run
-spread is **sd 0.038 AUC** over four independent draws, and the shipped
-40-episode model sits at the mean of that distribution. A larger corpus has to
-move AUC by roughly 0.08 before the difference carries information. This job is
-worth running to CLOSE that question, not because a gain is expected.
+spread on the seed-regenerated recipe is **sd 0.038 AUC** over four independent
+draws, so a candidate has to move AUC by roughly 0.08 against its own tier
+before the difference carries information.
+
+ANSWERED, BUT NOT BY THIS SCRIPT. The gain arrived: the shipped predictors sit
+at easy 0.957, medium 0.763, hard 0.703, against 0.911 / 0.683 / 0.673 before,
+and MEDIUM's +0.080 clears the bar above. That training was run on Deepnote, by
+hand, with `--episodes` rather than `--dataset` -- so it lifted the episode
+count without ever reading the published corpus, and the "does more data help"
+question is answered only for the seed-regenerated path. Nothing in this
+repository reproduces those runs and the episode count was not recorded; treat
+the route below as the Lightning option, not as the provenance of what ships.
+
+The corpus question this script was written for is therefore still open. What
+would settle it is `--dataset`, which streams the published split instead of
+materialising episodes densely in RAM -- the dense path is what stalled every
+earlier attempt at ~9.5 s per batch. That flag belongs to `smartscan train`, so
+it is available from any host with the corpus mounted, Deepnote included.
 
     python scripts/lightning_train.py --episodes 200 --machine A100 --dry-run
 """

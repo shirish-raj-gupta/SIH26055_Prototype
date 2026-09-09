@@ -476,12 +476,15 @@ Predictor output `p̂ ∈ [0,1]^B` is appended as a 13th feature plane to the RL
 (predictor frozen; no gradient flows back). Reported honestly: the hybrid must beat **both**
 parents on the same seeds, or we say that it did not.
 
-**It did not.** On MEDIUM it reaches +119 % TWIR against the tuned sweep, above
-`ppo` (−41 %) but below `predictor` (+159 %), so it does not beat both parents even
+**It did not.** On MEDIUM it reaches +123 % TWIR against the tuned sweep, above
+`ppo` (−41 %) but below `predictor` (+195 %), so it does not beat both parents even
 on the metric that flatters it — and the log-rank puts its hard-target hazard at
-0.777 (p = 8.6e-03), significantly *worse* than the sweep. On EASY and HARD it does
-not schedule at all: under the greedy argmax it tunes to one channel for the whole
-episode. See §21-L for the diagnosis and for why its training return is not
+0.773 (p = 5.7e-03), significantly *worse* than the sweep. Retraining the
+predictor underneath it did not change this: the hybrid moved +119 % → +123 %
+while its parent moved +159 % → +195 %, so the gap widened rather than closed.
+
+On EASY and HARD it does not schedule at all: under the greedy argmax it tunes to
+one channel for the whole episode. See §21-L for the diagnosis and for why its training return is not
 evidence to the contrary.
 
 ---
@@ -897,7 +900,7 @@ strawman. The RL result is reported as measured.
 ### J. The censored analysis inverted the leaderboard
 
 Ranked by threat-weighted interception ratio, `epsilon_greedy` leads at +305 %
-over the tuned sweep and `predictor` follows at +159 %. Both figures are real and
+over the tuned sweep and `predictor` follows at +195 %. Both figures are real and
 survive Holm correction at 30 seeds.
 
 Both are also misleading. TWIR counts interceptions without asking *which* emitter
@@ -912,13 +915,19 @@ test keeps them:
 | `whittle` | +67 % | 1.042 | 0.60 | 64 / 146 |
 | `phase_locked` | +77 % | 1.028 | 0.73 | 66 / 146 |
 | `sequential` | baseline | 1.000 | — | 68 / 146 |
-| `hybrid` | +119 % | 0.777 | 8.6e-03 | 94 / 146 |
+| `hybrid` | +123 % | 0.773 | 5.7e-03 | 92 / 146 |
 | `thompson` | +97 % | 0.682 | 1.8e-04 | 102 / 146 |
-| `predictor` | +159 % | 0.536 | 1.7e-08 | 112 / 146 |
 | `epsilon_greedy` | **+305 %** | **0.513** | **1.2e-08** | **115** / 146 |
+| `predictor` | +195 % | **0.362** | **5.5e-13** | **126** / 146 |
 
-The ordering is close to inverted. `epsilon_greedy` misses 115 of 146 scanning and
-agile emitters against the sweep's 68. The result therefore rests on `whittle` and
+The ordering is fully inverted, and the predictor sits at the bottom of it: it
+misses 126 of 146 scanning and agile emitters against the sweep's 68, worse than
+`epsilon_greedy`'s 115. Retraining the predictor moved it *down* this table while
+moving it up the TWIR one (hazard 0.536 -> 0.362, never-intercepted 112 -> 126,
+TWIR +159 % -> +195 %), with every policy that does not read predictor weights
+unchanged to the digit across the two runs. Improving the occupancy model
+improved the flattering metric and degraded the mission one, which is the
+cleanest evidence in this project that the two are not proxies for each other. The result therefore rests on `whittle` and
 `phase_locked` — the only policies that raise interception ratio while leaving
 hard-target hazard within noise of 1.0 — which is where §17 Risk B predicted it
 would land, though not for the reason given there.
@@ -987,10 +996,49 @@ The spread is ±0.038, so a single-run difference must exceed roughly 0.08 to
 mean anything. Every candidate that appeared to beat the shipped model —
 31x400 → 0.767, 97x128 → 0.733, 62x200 → 0.696 — was one draw each and sits
 inside that band; 0.767 is above the maximum of the four repeats and was simply
-an upper-tail draw. Corpus size is not the limitation at this tier.
+an upper-tail draw at the window budget those variants shared.
 
-The same number validates the comparison that matters: `predictor_easy` at 0.911
-against MEDIUM's 0.683 is roughly six standard deviations, so the tiers really
+**Overturned, but narrowly.** The paragraph above used to end "corpus size is
+not the limitation at this tier", and that claim outran its evidence: every
+variant it compared held the window budget near 12,400, so the experiment could
+only speak about redistributing a fixed budget, never about enlarging one.
+Retraining at a larger seed-regenerated episode count gives:
+
+    easy 0.957 (was 0.911)   medium 0.763 (was 0.683)   hard 0.703 (was 0.673)
+
+MEDIUM's +0.080 clears the 0.08 bar this section set. EASY (+0.046) and HARD
+(+0.030) move the same way but do not individually clear it.
+
+The corroboration that matters is the **teacher**, which improves on every tier
+alongside the student (MEDIUM AUC 0.637 -> 0.728, AP 0.223 -> 0.405). The four
+repeats above varied only the student's draw; none of them could move a teacher.
+That an upstream model improved too is what separates this from the 0.767
+upper-tail draw, which moved the student alone.
+
+**Scope, and a trap worth recording.** These runs did not read the published
+corpus -- they still regenerate from seeds at `--episodes 300
+--windows-per-episode 200`, so the 5 %-of-available-data limitation stands and
+only the "it does not matter" half is retracted.
+
+The spread has been measured at that recipe. Six draws on verified-disjoint
+episode blocks give AUC 0.7598, 0.7641, 0.7597, 0.7718, 0.7634, 0.7627 --
+**mean 0.7636, sd 0.0044**. The bar at 300x200 is 2 sd = 0.0089, and MEDIUM's
+gap over the incumbent is +0.081: it clears its own bar ninefold. The teacher
+moves with it on every tier (MEDIUM AUC 0.637 -> 0.728, AP 0.223 -> 0.405),
+which the four 31x400 repeats could not have produced, since they vary only the
+student's draw.
+
+The trap is worth recording because it nearly cost a wrong number. `cli.py`
+derives training episodes as `range(run.seed + 1000, run.seed + 1000 + episodes)`,
+so two runs are independent only when their seeds differ by at least the episode
+count. Seeds 20260101 and 20260202 differ by 101 at 300 episodes and share **199
+of 300 training episodes**; taken as replicates they made the recipe look 51x
+tighter than 31x400. Over genuinely disjoint blocks the honest figure is 9x. The
+seed does not index a run, it indexes a WINDOW into episode space, and spacing
+below the episode count silently manufactures agreement.
+
+The same number validates the comparison that matters: `predictor_easy` at 0.957
+against MEDIUM's 0.763 is far outside the spread, so the tiers really
 do differ in difficulty. That is also why easy reached the project's best AUC
 from its *smallest* corpus.
 
@@ -1005,6 +1053,14 @@ Full-corpus training was moved to Lightning once the local RAM ceiling (~40
 episodes) and Kaggle's data-bound loader had both been exhausted. Three
 failures came before a single episode was trained, and none of them was a
 modelling problem.
+
+Read this section as history rather than as provenance. The full-corpus
+predictors that actually ship were trained on **Deepnote**, by hand, after the
+attempts below; no script in this repository reproduces that run, and
+`scripts/lightning_train.py` describes the Lightning route rather than the one
+taken. The failures catalogued here are still worth keeping — each one cost a
+paid run, and two of them are host-independent — but the checkpoints in
+`runs/checkpoints` did not come from them.
 
 **The jobs were write-only.** A 100-episode run on a T4 completed successfully
 and its checkpoint no longer exists. It wrote to `runs/checkpoints` relative to
