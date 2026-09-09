@@ -42,7 +42,29 @@ runs/checkpoints/quarantine/
 # histories matched nothing and would otherwise be committed as untracked
 # strays that shadow the real `runs/checkpoints/*_history.json`.
 /out/
-reports/
+# Benchmark output. The *published* results are the exception, for the same
+# reason the checkpoints are: a clone with no results in it cannot be checked.
+# Every number quoted in README.md and docs/architecture.md comes from these
+# files, and a reader who cannot open them has to take the claims on trust --
+# which is the one thing this project keeps saying it will not ask for.
+# Regenerable, but only by re-running a 39-minute 13-agent x 3-tier x 30-seed
+# grid, so shipping them is what makes the numbers checkable in practice.
+reports/*
+!reports/leaderboard.md
+!reports/leaderboard.tex
+!reports/metrics_*.json
+# The analysis side-studies the docs cite by name.
+!reports/ablation.json
+!reports/coverage_weight_hazard.json
+!reports/coverage_weight_sweep.json
+!reports/diversity_sweep.json
+!reports/external_tsrd.json
+!reports/external_tsrd_scan.json
+!reports/latency_budget.json
+!reports/predictor_replication.json
+!reports/robustness.json
+# Figures F1-F7, referenced from the README and the architecture note.
+!reports/*.png
 /build/
 dist/
 *.egg-info/
@@ -59,6 +81,9 @@ lightning_logs/
 *.onnx
 *.npz
 *.parquet
+# ...except the tidy grid output. Same trap as the checkpoints above: this has
+# to sit AFTER the blanket rule, because gitignore resolves by LAST match.
+!reports/results.parquet
 !tests/**/*.npz
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,129 @@
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{llrrrr}
+    \toprule
+    Scheduler & Metric & Baseline & Agent & Improvement (95\% CI) & $p$ \\
+    \midrule
+    \midrule
+    \texttt{random} & twir\_rate & 0.01756 & 0.01006 & -42.7\% [-46.1, -41.1]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{priority\_rr} & twir\_rate & 0.01756 & 0.02479 & +41.1\% [+31.8, +48.8]$^{\dagger}$ & 3.09e-07 \\
+    \texttt{epsilon\_greedy} & twir\_rate & 0.01756 & 0.06548 & +272.8\% [+230.3, +326.2]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{ucb1} & twir\_rate & 0.01756 & 0.02166 & +23.3\% [+15.4, +29.6]$^{\dagger}$ & 4.53e-07 \\
+    \texttt{thompson} & twir\_rate & 0.01756 & 0.04933 & +180.9\% [+151.4, +196.2]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{whittle} & twir\_rate & 0.01756 & 0.01992 & +13.4\% [+5.4, +20.6]$^{\dagger}$ & 0.000418 \\
+    \texttt{coprime\_sweep} & twir\_rate & 0.01756 & 0.009987 & -43.1\% [-46.2, -42.1]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{phase\_locked} & twir\_rate & 0.01756 & 0.01992 & +13.4\% [+5.4, +20.6]$^{\dagger}$ & 0.000418 \\
+    \texttt{predictor} & twir\_rate & 0.01756 & 0.1419 & +707.8\% [+620.3, +1022.9]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{dqn} & twir\_rate & 0.01756 & 0.0101 & -42.5\% [-46.4, -39.3] & 0.335 \\
+    \texttt{ppo} & twir\_rate & 0.01756 & 0.1916 & +990.9\% [+757.8, +1099.6]$^{\dagger}$ & 1.79e-07 \\
+    \texttt{hybrid} & twir\_rate & 0.01756 & 0.002384 & -86.4\% [-89.1, -82.5]$^{\dagger}$ & 1.79e-07 \\
+    \midrule
+    \texttt{random} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{priority\_rr} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{epsilon\_greedy} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{ucb1} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{thompson} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{whittle} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{coprime\_sweep} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{phase\_locked} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{predictor} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{dqn} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{ppo} & coverage & 1 & 1 & -0.0\% [-0.0, -0.0] & 1 \\
+    \texttt{hybrid} & coverage & 1 & 0.8 & -20.0\% [-20.0, -0.0]$^{\dagger}$ & 0.011 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Paired comparison against \texttt{sequential} on the easy tier, 30 seeds. Improvement is signed so positive is better; intervals are 95\% paired bootstrap. $p$ is Wilcoxon signed-rank after Holm--Bonferroni correction; $\dagger$ marks $p < 0.05$.}
+  \label{tab:leaderboard-easy}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{llrrrr}
+    \toprule
+    Scheduler & Metric & Baseline & Agent & Improvement (95\% CI) & $p$ \\
+    \midrule
+    \texttt{random} & ttfi\_hard\_median\_s & 2.659 & 4.544 & -70.9\% [-374.7, +45.9] & 1 \\
+    \texttt{priority\_rr} & ttfi\_hard\_median\_s & 1.855 & 0.087 & +95.3\% [-5.7, +97.9] & 1 \\
+    \texttt{ucb1} & ttfi\_hard\_median\_s & 3.085 & 0.111 & +96.4\% [-86.4, +99.1] & 1 \\
+    \texttt{whittle} & ttfi\_hard\_median\_s & 3.247 & 2.928 & +9.8\% [-260.8, +98.3] & 1 \\
+    \texttt{coprime\_sweep} & ttfi\_hard\_median\_s & 3.247 & 1.827 & +43.7\% [-75.1, +75.6] & 1 \\
+    \texttt{phase\_locked} & ttfi\_hard\_median\_s & 3.566 & 2.511 & +29.6\% [-260.8, +98.5] & 1 \\
+    \texttt{dqn} & ttfi\_hard\_median\_s & 3.566 & 2.57 & +27.9\% [-576.3, +97.2] & 1 \\
+    \texttt{ppo} & ttfi\_hard\_median\_s & 4.259 & 3.328 & +21.9\% [-382.1, +48.6] & 1 \\
+    \midrule
+    \texttt{random} & twir\_rate & 0.01299 & 0.007402 & -43.0\% [-49.9, -32.7]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{priority\_rr} & twir\_rate & 0.01299 & 0.01213 & -6.6\% [-19.8, +4.8] & 1 \\
+    \texttt{epsilon\_greedy} & twir\_rate & 0.01299 & 0.05259 & +305.0\% [+209.7, +465.6]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{ucb1} & twir\_rate & 0.01299 & 0.01187 & -8.6\% [-19.1, +2.8] & 1 \\
+    \texttt{thompson} & twir\_rate & 0.01299 & 0.02553 & +96.6\% [+36.5, +237.5]$^{\dagger}$ & 1.54e-05 \\
+    \texttt{whittle} & twir\_rate & 0.01299 & 0.02173 & +67.3\% [+37.7, +129.1]$^{\dagger}$ & 7.66e-05 \\
+    \texttt{coprime\_sweep} & twir\_rate & 0.01299 & 0.007959 & -38.7\% [-45.5, -33.2]$^{\dagger}$ & 0.000224 \\
+    \texttt{phase\_locked} & twir\_rate & 0.01299 & 0.02293 & +76.5\% [+38.0, +145.2]$^{\dagger}$ & 0.00015 \\
+    \texttt{predictor} & twir\_rate & 0.01299 & 0.03835 & +195.3\% [+145.0, +397.0]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{dqn} & twir\_rate & 0.01299 & 0.0225 & +73.2\% [+35.0, +145.3]$^{\dagger}$ & 0.000224 \\
+    \texttt{ppo} & twir\_rate & 0.01299 & 0.007629 & -41.3\% [-54.9, -29.7]$^{\dagger}$ & 0.00494 \\
+    \texttt{hybrid} & twir\_rate & 0.01299 & 0.02898 & +123.2\% [+45.8, +222.3]$^{\dagger}$ & 0.00046 \\
+    \midrule
+    \texttt{random} & coverage & 0.8571 & 0.8286 & -3.3\% [-7.2, +7.7] & 1 \\
+    \texttt{priority\_rr} & coverage & 0.8571 & 0.8667 & +1.1\% [-0.0, +8.3] & 1 \\
+    \texttt{epsilon\_greedy} & coverage & 0.8571 & 0.7238 & -15.6\% [-22.7, -8.3]$^{\dagger}$ & 0.000393 \\
+    \texttt{ucb1} & coverage & 0.8571 & 0.8571 & -0.0\% [-6.7, +8.3] & 1 \\
+    \texttt{thompson} & coverage & 0.8571 & 0.7333 & -14.4\% [-15.4, -1.8]$^{\dagger}$ & 0.0018 \\
+    \texttt{whittle} & coverage & 0.8571 & 0.8571 & -0.0\% [-6.7, +8.3] & 1 \\
+    \texttt{coprime\_sweep} & coverage & 0.8571 & 0.8667 & +1.1\% [-0.0, +8.3] & 1 \\
+    \texttt{phase\_locked} & coverage & 0.8571 & 0.8571 & -0.0\% [-7.2, +8.3] & 1 \\
+    \texttt{predictor} & coverage & 0.8571 & 0.6667 & -22.2\% [-25.0, -16.7]$^{\dagger}$ & 0.000229 \\
+    \texttt{dqn} & coverage & 0.8571 & 0.8 & -6.7\% [-7.7, +7.1] & 1 \\
+    \texttt{ppo} & coverage & 0.8571 & 0.8286 & -3.3\% [-7.7, +8.3] & 1 \\
+    \texttt{hybrid} & coverage & 0.8571 & 0.7929 & -7.5\% [-14.4, -0.0]$^{\dagger}$ & 0.00963 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Paired comparison against \texttt{sequential} on the medium tier, 30 seeds. Improvement is signed so positive is better; intervals are 95\% paired bootstrap. $p$ is Wilcoxon signed-rank after Holm--Bonferroni correction; $\dagger$ marks $p < 0.05$.}
+  \label{tab:leaderboard-medium}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{llrrrr}
+    \toprule
+    Scheduler & Metric & Baseline & Agent & Improvement (95\% CI) & $p$ \\
+    \midrule
+    \texttt{random} & ttfi\_hard\_median\_s & 0.161 & 2.927 & -1718.0\% [-3535.6, -127.5]$^{\dagger}$ & 0.0331 \\
+    \texttt{priority\_rr} & ttfi\_hard\_median\_s & 0.161 & 3.351 & -1981.4\% [-2534.1, -130.0]$^{\dagger}$ & 0.00857 \\
+    \texttt{ucb1} & ttfi\_hard\_median\_s & 0.161 & 2.779 & -1625.8\% [-2373.3, +19.6] & 0.342 \\
+    \texttt{whittle} & ttfi\_hard\_median\_s & 0.161 & 3.943 & -2349.1\% [-3501.2, -200.4]$^{\dagger}$ & 0.0499 \\
+    \texttt{coprime\_sweep} & ttfi\_hard\_median\_s & 0.161 & 2.207 & -1270.5\% [-1945.4, -4.6] & 1 \\
+    \texttt{phase\_locked} & ttfi\_hard\_median\_s & 0.161 & 3.652 & -2168.3\% [-3397.5, -195.5]$^{\dagger}$ & 0.00939 \\
+    \texttt{dqn} & ttfi\_hard\_median\_s & 0.162 & 3.742 & -2209.6\% [-2973.5, -198.1]$^{\dagger}$ & 0.0312 \\
+    \midrule
+    \texttt{random} & twir\_rate & 0.01282 & 0.007288 & -43.2\% [-49.4, -37.0]$^{\dagger}$ & 7.39e-05 \\
+    \texttt{priority\_rr} & twir\_rate & 0.01282 & 0.007455 & -41.9\% [-46.8, -34.3]$^{\dagger}$ & 8.7e-05 \\
+    \texttt{ucb1} & twir\_rate & 0.01282 & 0.008511 & -33.6\% [-38.4, -28.7]$^{\dagger}$ & 2.14e-06 \\
+    \texttt{thompson} & twir\_rate & 0.01282 & 0.01908 & +48.8\% [-21.3, +106.6] & 1 \\
+    \texttt{whittle} & twir\_rate & 0.01282 & 0.02502 & +95.1\% [+70.2, +140.8]$^{\dagger}$ & 2.14e-06 \\
+    \texttt{coprime\_sweep} & twir\_rate & 0.01282 & 0.00744 & -42.0\% [-46.4, -35.7]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{phase\_locked} & twir\_rate & 0.01282 & 0.02646 & +106.4\% [+75.2, +151.2]$^{\dagger}$ & 1.1e-06 \\
+    \texttt{predictor} & twir\_rate & 0.01282 & 0.04436 & +246.0\% [+177.9, +301.1]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{dqn} & twir\_rate & 0.01282 & 0.02824 & +120.2\% [+99.4, +148.8]$^{\dagger}$ & 1.94e-07 \\
+    \texttt{ppo} & twir\_rate & 0.01282 & 0.01555 & +21.3\% [-31.3, +36.8] & 1 \\
+    \texttt{hybrid} & twir\_rate & 0.01282 & 0.0241 & +88.0\% [-74.2, +145.5] & 0.874 \\
+    \midrule
+    \texttt{random} & coverage & 0.8541 & 0.7931 & -7.1\% [-8.9, -1.7] & 0.421 \\
+    \texttt{priority\_rr} & coverage & 0.8541 & 0.8107 & -5.1\% [-7.4, -0.3]$^{\dagger}$ & 0.0102 \\
+    \texttt{ucb1} & coverage & 0.8541 & 0.8107 & -5.1\% [-7.6, -0.7] & 0.16 \\
+    \texttt{thompson} & coverage & 0.8541 & 0.6667 & -21.9\% [-26.2, -18.5]$^{\dagger}$ & 0.000122 \\
+    \texttt{whittle} & coverage & 0.8541 & 0.7931 & -7.1\% [-9.6, -2.9]$^{\dagger}$ & 0.0128 \\
+    \texttt{coprime\_sweep} & coverage & 0.8541 & 0.8621 & +0.9\% [-4.7, +4.4] & 1 \\
+    \texttt{phase\_locked} & coverage & 0.8541 & 0.8 & -6.3\% [-9.1, -1.5]$^{\dagger}$ & 0.00857 \\
+    \texttt{predictor} & coverage & 0.8541 & 0.5764 & -32.5\% [-36.9, -28.0]$^{\dagger}$ & 0.000122 \\
+    \texttt{dqn} & coverage & 0.8541 & 0.7931 & -7.1\% [-11.3, -1.5] & 0.0502 \\
+    \texttt{ppo} & coverage & 0.8541 & 0.4408 & -48.4\% [-52.0, -43.6]$^{\dagger}$ & 0.000122 \\
+    \texttt{hybrid} & coverage & 0.8541 & 0.06782 & -92.1\% [-95.9, -87.3]$^{\dagger}$ & 0.000122 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Paired comparison against \texttt{sequential} on the hard tier, 30 seeds. Improvement is signed so positive is better; intervals are 95\% paired bootstrap. $p$ is Wilcoxon signed-rank after Holm--Bonferroni correction; $\dagger$ marks $p < 0.05$.}
+  \label{tab:leaderboard-hard}
+\end{table}

@@ -1,0 +1,250 @@
+{
+  "in_distribution": {
+    "sequential": {
+      "ttfi_hard_median_s": 3.4844999999999997,
+      "ttfi_median_s": 0.112,
+      "twir_rate": 0.01607746831366357,
+      "coverage": 0.8976190476190476,
+      "staleness_max_s": 0.623,
+      "coverage_entropy": 0.9981092478076337,
+      "waste_fraction": 0.0,
+      "reward_total": 224.88882262937477
+    },
+    "ucb1": {
+      "ttfi_hard_median_s": 3.6770000000000005,
+      "ttfi_median_s": 0.0695,
+      "twir_rate": 0.01248621535376488,
+      "coverage": 0.8666666666666667,
+      "staleness_max_s": 0.2385,
+      "coverage_entropy": 0.9898306463305555,
+      "waste_fraction": 0.0,
+      "reward_total": 198.26916513344509
+    },
+    "whittle": {
+      "ttfi_hard_median_s": 6.3105,
+      "ttfi_median_s": 0.08,
+      "twir_rate": 0.023209339843573415,
+      "coverage": 0.861904761904762,
+      "staleness_max_s": 1.8210000000000002,
+      "coverage_entropy": 0.966489686800786,
+      "waste_fraction": 0.0,
+      "reward_total": 210.4408805013518
+    },
+    "phase_locked": {
+      "ttfi_hard_median_s": 5.882,
+      "ttfi_median_s": 0.08,
+      "twir_rate": 0.02669126808922189,
+      "coverage": 0.861904761904762,
+      "staleness_max_s": 1.8210000000000002,
+      "coverage_entropy": 0.9680591993671636,
+      "waste_fraction": 0.0,
+      "reward_total": 211.5770175522815
+    },
+    "predictor": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 0.1115,
+      "twir_rate": 0.02766259071940253,
+      "coverage": 0.6904761904761905,
+      "staleness_max_s": 1.1485,
+      "coverage_entropy": 0.49078288117200286,
+      "waste_fraction": 0.0,
+      "reward_total": 159.6245409856367
+    },
+    "dqn": {
+      "ttfi_hard_median_s": 8.1665,
+      "ttfi_median_s": 0.1665,
+      "twir_rate": 0.025973520722368748,
+      "coverage": 0.8285714285714285,
+      "staleness_max_s": 2.9605,
+      "coverage_entropy": 0.9911830254153267,
+      "waste_fraction": 0.0,
+      "reward_total": 211.713601915398
+    }
+  },
+  "tier_hard": {
+    "sequential": {
+      "ttfi_hard_median_s": 0.162,
+      "ttfi_median_s": 0.1195,
+      "twir_rate": 0.012822017048043505,
+      "coverage": 0.8304597701149425,
+      "staleness_max_s": 0.623,
+      "coverage_entropy": 0.9981092478076337,
+      "waste_fraction": 0.16,
+      "reward_total": -1501.0819892997406
+    },
+    "ucb1": {
+      "ttfi_hard_median_s": 3.9385000000000003,
+      "ttfi_median_s": 0.0895,
+      "twir_rate": 0.0081226356109496,
+      "coverage": 0.8107142857142857,
+      "staleness_max_s": 0.2955,
+      "coverage_entropy": 0.9881063662589255,
+      "waste_fraction": 0.32498500299940014,
+      "reward_total": -1812.5590869345033
+    },
+    "whittle": {
+      "ttfi_hard_median_s": 7.764,
+      "ttfi_median_s": 0.10600000000000001,
+      "twir_rate": 0.02272026569820506,
+      "coverage": 0.7761904761904762,
+      "staleness_max_s": 3.0755,
+      "coverage_entropy": 0.9599421079083897,
+      "waste_fraction": 0.10051375766646263,
+      "reward_total": -389.8186273412065
+    },
+    "phase_locked": {
+      "ttfi_hard_median_s": 6.74,
+      "ttfi_median_s": 0.1,
+      "twir_rate": 0.024998093045359507,
+      "coverage": 0.7857142857142857,
+      "staleness_max_s": 2.984,
+      "coverage_entropy": 0.9599421079083897,
+      "waste_fraction": 0.09979866491593792,
+      "reward_total": -375.79370945598214
+    },
+    "predictor": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 2.4865000000000004,
+      "twir_rate": 0.042018151896116226,
+      "coverage": 0.569047619047619,
+      "staleness_max_s": 2.482,
+      "coverage_entropy": 0.5408845914865128,
+      "waste_fraction": 0.05218705311682906,
+      "reward_total": -497.2518620108277
+    },
+    "dqn": {
+      "ttfi_hard_median_s": 4.8100000000000005,
+      "ttfi_median_s": 0.17099999999999999,
+      "twir_rate": 0.026929568339305113,
+      "coverage": 0.7931034482758621,
+      "staleness_max_s": 10.0,
+      "coverage_entropy": 0.9586649051617929,
+      "waste_fraction": 0.005746935911995448,
+      "reward_total": 284.4447814199947
+    }
+  },
+  "density_2x": {
+    "sequential": {
+      "ttfi_hard_median_s": 3.9035,
+      "ttfi_median_s": 0.107,
+      "twir_rate": 0.014180417330132318,
+      "coverage": 0.861904761904762,
+      "staleness_max_s": 0.623,
+      "coverage_entropy": 0.9981092478076337,
+      "waste_fraction": 0.0,
+      "reward_total": 455.99059403735737
+    },
+    "ucb1": {
+      "ttfi_hard_median_s": 3.8695000000000004,
+      "ttfi_median_s": 0.093,
+      "twir_rate": 0.011366107597789239,
+      "coverage": 0.864367816091954,
+      "staleness_max_s": 0.297,
+      "coverage_entropy": 0.9870645272025538,
+      "waste_fraction": 0.0,
+      "reward_total": 434.7770800802702
+    },
+    "whittle": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 0.1265,
+      "twir_rate": 0.023624838618726694,
+      "coverage": 0.7833333333333334,
+      "staleness_max_s": 2.8855,
+      "coverage_entropy": 0.9641946636469522,
+      "waste_fraction": 0.0,
+      "reward_total": 436.04597931732053
+    },
+    "phase_locked": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 0.1265,
+      "twir_rate": 0.023624838618726694,
+      "coverage": 0.8,
+      "staleness_max_s": 2.8855,
+      "coverage_entropy": 0.9641946636469522,
+      "waste_fraction": 0.0,
+      "reward_total": 430.9725676774127
+    },
+    "predictor": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 0.1265,
+      "twir_rate": 0.04006136917579345,
+      "coverage": 0.6833333333333333,
+      "staleness_max_s": 1.645,
+      "coverage_entropy": 0.3702917378926015,
+      "waste_fraction": 0.0,
+      "reward_total": 323.05883406427563
+    },
+    "dqn": {
+      "ttfi_hard_median_s": 7.0655,
+      "ttfi_median_s": 0.34950000000000003,
+      "twir_rate": 0.02042698224794983,
+      "coverage": 0.8333333333333334,
+      "staleness_max_s": 4.67,
+      "coverage_entropy": 0.981129856836473,
+      "waste_fraction": 0.0,
+      "reward_total": 443.08454086407664
+    }
+  },
+  "holdout_frequency_agile": {
+    "sequential": {
+      "ttfi_hard_median_s": 6.269,
+      "ttfi_median_s": 0.132,
+      "twir_rate": 0.014911478459854549,
+      "coverage": 0.8285714285714285,
+      "staleness_max_s": 0.623,
+      "coverage_entropy": 0.9981092478076337,
+      "waste_fraction": 0.0,
+      "reward_total": 201.27663333793606
+    },
+    "ucb1": {
+      "ttfi_hard_median_s": 6.799,
+      "ttfi_median_s": 0.07100000000000001,
+      "twir_rate": 0.011516027155542542,
+      "coverage": 0.7666666666666666,
+      "staleness_max_s": 0.2175,
+      "coverage_entropy": 0.989681493916575,
+      "waste_fraction": 0.0,
+      "reward_total": 170.87720923646862
+    },
+    "whittle": {
+      "ttfi_hard_median_s": 7.9265,
+      "ttfi_median_s": 0.1205,
+      "twir_rate": 0.022082210414707062,
+      "coverage": 0.7333333333333333,
+      "staleness_max_s": 1.306,
+      "coverage_entropy": 0.9902477594173205,
+      "waste_fraction": 0.0,
+      "reward_total": 177.44292073212003
+    },
+    "phase_locked": {
+      "ttfi_hard_median_s": 7.9265,
+      "ttfi_median_s": 0.1205,
+      "twir_rate": 0.022082210414707062,
+      "coverage": 0.7333333333333333,
+      "staleness_max_s": 1.306,
+      "coverage_entropy": 0.9902477594173205,
+      "waste_fraction": 0.0,
+      "reward_total": 177.44292073212003
+    },
+    "predictor": {
+      "ttfi_hard_median_s": Infinity,
+      "ttfi_median_s": 0.128,
+      "twir_rate": 0.025433310639150546,
+      "coverage": 0.6,
+      "staleness_max_s": 1.1460000000000001,
+      "coverage_entropy": 0.5126308428944032,
+      "waste_fraction": 0.0,
+      "reward_total": 139.92194969634323
+    },
+    "dqn": {
+      "ttfi_hard_median_s": 8.152000000000001,
+      "ttfi_median_s": 0.21300000000000002,
+      "twir_rate": 0.02893218673299387,
+      "coverage": 0.7333333333333333,
+      "staleness_max_s": 2.2115,
+      "coverage_entropy": 0.9937456284108137,
+      "waste_fraction": 0.0,
+      "reward_total": 190.10777120884717
+    }
+  }
+}
