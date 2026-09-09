@@ -9,24 +9,47 @@ coverage, however clever its ordering. Below one expected chance, catching it
 is a coin flip that no scheduling, training or compute converts into a
 certainty.
 
-## `hard` — K/B = 4/128 = 0.0312, 3 seeds
+## `medium` — K/B = 4/128 = 0.0312, 8 seeds
 
 | emitter class | n | median E[chances] | Poisson floor miss | share with E<1 | `sequential` misses | `coprime_sweep` misses | `whittle` misses | `phase_locked` misses |
 |---|---|---|---|---|---|---|---|---|
-| AgileBeamRadar | 9 | 0.81 | 44.4% | 56% | 6 | 6 | 8 | 7 |
-| CircularScanRadar | 24 | 5.52 | 0.4% | 12% | 4 | 5 | 9 | 10 |
-| SectorScanRadar | 9 | 19.59 | 0.0% | 0% | 2 | 0 | 2 | 2 |
-| CommsBurst | 9 | 52.03 | 0.0% | 0% | 1 | 1 | 1 | 0 |
-| FrequencyAgile | 12 | 230.19 | 0.0% | 8% | 0 | 0 | 0 | 0 |
-| PulsedRadar | 12 | 311.00 | 0.0% | 0% | 0 | 0 | 0 | 0 |
-| **total** | | | | | **13** | **12** | **20** | **19** |
+| AgileBeamRadar | 8 | 0.34 | 70.9% | 88% | 7 | 5 | 6 | 6 |
+| CircularScanRadar | 24 | 3.58 | 2.8% | 0% | 11 | 5 | 11 | 11 |
+| SectorScanRadar | 8 | 26.77 | 0.0% | 0% | 0 | 0 | 1 | 1 |
+| CommsBurst | 8 | 42.44 | 0.0% | 0% | 0 | 0 | 0 | 0 |
+| FrequencyAgile | 16 | 275.08 | 0.0% | 6% | 2 | 1 | 1 | 1 |
+| FixedCW | 24 | 312.50 | 0.0% | 0% | 0 | 0 | 0 | 0 |
+| PulsedRadar | 32 | 312.50 | 0.0% | 0% | 0 | 0 | 0 | 0 |
+| **total** | | | | | **20** | **11** | **19** | **19** |
 
 **Below the wall:** `AgileBeamRadar` — fewer than
 one expected look per episode. A predictor cannot help here either: estimating
 a scan period needs at least two observations, and these emitters are seen
 zero times or once. The missing information was never collected.
 
-**Where headroom is real:** `CircularScanRadar` (floor 0.4%, best policy still misses 17%)
+**Where headroom is real:** `CircularScanRadar` (floor 2.8%, best policy still misses 21%), `FrequencyAgile` (floor 0.0%, best policy still misses 6%)
+
+These are catchable in principle and still missed, so they — not the
+needle-in-haystack classes — are where scheduling work would pay.
+
+## `hard` — K/B = 4/128 = 0.0312, 8 seeds
+
+| emitter class | n | median E[chances] | Poisson floor miss | share with E<1 | `sequential` misses | `coprime_sweep` misses | `whittle` misses | `phase_locked` misses |
+|---|---|---|---|---|---|---|---|---|
+| AgileBeamRadar | 24 | 0.81 | 44.4% | 54% | 16 | 14 | 15 | 15 |
+| CircularScanRadar | 64 | 5.39 | 0.5% | 6% | 14 | 16 | 25 | 25 |
+| SectorScanRadar | 24 | 17.56 | 0.0% | 8% | 3 | 1 | 4 | 4 |
+| CommsBurst | 24 | 41.75 | 0.0% | 0% | 2 | 1 | 3 | 1 |
+| FrequencyAgile | 32 | 285.94 | 0.0% | 6% | 1 | 1 | 3 | 2 |
+| PulsedRadar | 32 | 312.45 | 0.0% | 0% | 0 | 0 | 0 | 0 |
+| **total** | | | | | **36** | **33** | **50** | **47** |
+
+**Below the wall:** `AgileBeamRadar` — fewer than
+one expected look per episode. A predictor cannot help here either: estimating
+a scan period needs at least two observations, and these emitters are seen
+zero times or once. The missing information was never collected.
+
+**Where headroom is real:** `CircularScanRadar` (floor 0.5%, best policy still misses 22%)
 
 These are catchable in principle and still missed, so they — not the
 needle-in-haystack classes — are where scheduling work would pay.
