@@ -128,3 +128,5 @@ scripts/_*.py
 
 # Build logs
 *.log
+.deepnote_session
+scripts/.deepnote_notebook_backup.json
