@@ -1,0 +1,133 @@
+[
+ {
+  "tier": "hard",
+  "n_seeds": 3,
+  "k": 4,
+  "b": 128,
+  "duty": 0.03125,
+  "n_real_emitters": 75,
+  "n_catchable": 71,
+  "policies": [
+   "sequential",
+   "coprime_sweep",
+   "whittle",
+   "phase_locked"
+  ],
+  "classes": {
+   "AgileBeamRadar": {
+    "n": 9,
+    "median_expected_chances": 0.8125,
+    "poisson_floor_miss_rate": 0.44374731008107987,
+    "fraction_below_one_chance": 0.5555555555555556,
+    "misses": {
+     "sequential": 6,
+     "coprime_sweep": 6,
+     "whittle": 8,
+     "phase_locked": 7
+    },
+    "miss_rate": {
+     "sequential": 0.6666666666666666,
+     "coprime_sweep": 0.6666666666666666,
+     "whittle": 0.8888888888888888,
+     "phase_locked": 0.7777777777777778
+    }
+   },
+   "CircularScanRadar": {
+    "n": 24,
+    "median_expected_chances": 5.515625,
+    "poisson_floor_miss_rate": 0.0040234119200233415,
+    "fraction_below_one_chance": 0.125,
+    "misses": {
+     "sequential": 4,
+     "coprime_sweep": 5,
+     "whittle": 9,
+     "phase_locked": 10
+    },
+    "miss_rate": {
+     "sequential": 0.16666666666666666,
+     "coprime_sweep": 0.20833333333333334,
+     "whittle": 0.375,
+     "phase_locked": 0.4166666666666667
+    }
+   },
+   "CommsBurst": {
+    "n": 9,
+    "median_expected_chances": 52.03125,
+    "poisson_floor_miss_rate": 2.5299692255799318e-23,
+    "fraction_below_one_chance": 0.0,
+    "misses": {
+     "sequential": 1,
+     "coprime_sweep": 1,
+     "whittle": 1,
+     "phase_locked": 0
+    },
+    "miss_rate": {
+     "sequential": 0.1111111111111111,
+     "coprime_sweep": 0.1111111111111111,
+     "whittle": 0.1111111111111111,
+     "phase_locked": 0.0
+    }
+   },
+   "FrequencyAgile": {
+    "n": 12,
+    "median_expected_chances": 230.1875,
+    "poisson_floor_miss_rate": 1.073591209580935e-100,
+    "fraction_below_one_chance": 0.08333333333333333,
+    "misses": {
+     "sequential": 0,
+     "coprime_sweep": 0,
+     "whittle": 0,
+     "phase_locked": 0
+    },
+    "miss_rate": {
+     "sequential": 0.0,
+     "coprime_sweep": 0.0,
+     "whittle": 0.0,
+     "phase_locked": 0.0
+    }
+   },
+   "PulsedRadar": {
+    "n": 12,
+    "median_expected_chances": 311.0,
+    "poisson_floor_miss_rate": 8.59836997230016e-136,
+    "fraction_below_one_chance": 0.0,
+    "misses": {
+     "sequential": 0,
+     "coprime_sweep": 0,
+     "whittle": 0,
+     "phase_locked": 0
+    },
+    "miss_rate": {
+     "sequential": 0.0,
+     "coprime_sweep": 0.0,
+     "whittle": 0.0,
+     "phase_locked": 0.0
+    }
+   },
+   "SectorScanRadar": {
+    "n": 9,
+    "median_expected_chances": 19.59375,
+    "poisson_floor_miss_rate": 3.094158060394598e-09,
+    "fraction_below_one_chance": 0.0,
+    "misses": {
+     "sequential": 2,
+     "coprime_sweep": 0,
+     "whittle": 2,
+     "phase_locked": 2
+    },
+    "miss_rate": {
+     "sequential": 0.2222222222222222,
+     "coprime_sweep": 0.0,
+     "whittle": 0.2222222222222222,
+     "phase_locked": 0.2222222222222222
+    }
+   }
+  },
+  "total_misses": {
+   "sequential": 13,
+   "coprime_sweep": 12,
+   "whittle": 20,
+   "phase_locked": 19
+  }
+ }
+]

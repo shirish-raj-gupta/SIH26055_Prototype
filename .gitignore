@@ -69,6 +69,8 @@ reports/*
 # script re-checks.
 !reports/figures_of_merit.json
 !reports/figures_of_merit.md
+!reports/hard_tier_ceiling.json
+!reports/hard_tier_ceiling.md
 # Figures F1-F7, referenced from the README and the architecture note.
 !reports/*.png
 /build/
