@@ -19,6 +19,7 @@ running delta. Any difference you see is the policy, not chance.
 
 from __future__ import annotations
 
+import math
 import sys
 import time
 from dataclasses import dataclass, field
@@ -213,11 +214,25 @@ def _explain(track: Track, action: int, cfg: Config) -> str:
     return f"ch {lo}–{lo + k - 1}: " + " + ".join(reasons)
 
 
-def _advance(track: Track, cfg: Config, n_steps: int, interferers: set[int]) -> None:
-    """Advance one track by ``n_steps`` dwells."""
-    for _ in range(n_steps):
-        if track.done:
-            return
+def _advance(track: Track, cfg: Config, n_slots: int, interferers: set[int]) -> None:
+    """Advance one track by ``n_slots`` slots of episode time.
+
+    Slots, not dwells. A dwell is not a unit of time: a retune costs settle
+    slots on top of the dwell itself, so a scheduler that hops constantly
+    burns much more of the episode per dwell than one that sits still.
+    Advancing every panel by a fixed *dwell* count therefore handed the
+    restless policies around 74% more time on air than the sequential
+    incumbent -- measured on medium.yaml, 200 dwells put whittle at 0.582 s
+    against sequential's 0.334 s -- underneath a panel captioned "same
+    scenario, same seed, same detection luck".
+
+    ``run_episode`` runs every scheduler to the same time horizon and lets the
+    retune cost eat into its budget. The demo has to use that same protocol or
+    it is not showing the benchmark it claims to be showing.
+    """
+    target = track.t + max(int(n_slots), 0)
+    while not track.done and track.t < target:
+        before = track.t
         action = int(track.scheduler.act(track.belief, track.receiver.t))
         track.belief.note_action(action)
         obs = track.receiver.step(action)
@@ -247,12 +262,37 @@ def _advance(track: Track, cfg: Config, n_steps: int, interferers: set[int]) -> 
         track.actions.append(action)
         track.dwells.append(td)
         track.last_reason = _explain(track, action, cfg)
+        # Guard last, after the bookkeeping: breaking earlier would leave a
+        # reward recorded with no matching action.
+        if track.t <= before:  # a zero-length dwell would spin forever
+            break
 
 
 # --------------------------------------------------------------------------- #
 # Rendering
 # --------------------------------------------------------------------------- #
-def _waterfall(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray, title: str) -> Any:
+def _x_max(elapsed_s: float, episode_s: float) -> float:
+    """Right-hand edge of the waterfall's time axis.
+
+    Pinning the axis to the full episode leaves the first seconds of a run
+    crammed into a sliver at the far left -- on a projector that reads as an
+    empty chart. Letting it track the clock exactly is worse: the axis then
+    relabels every frame and the markers crawl.
+
+    So it grows in tenths of an episode. The window only ever changes ten
+    times, and it is never shorter than the elapsed time, which is the part
+    that matters: a window that lagged the clock would silently crop the
+    intercepts the demo exists to show.
+    """
+    step = episode_s / 10.0
+    if not math.isfinite(step) or step <= 0.0:
+        return max(float(episode_s), 0.0)
+    grown = math.ceil(max(elapsed_s, 0.0) / step) * step
+    return float(min(episode_s, max(step, grown)))
+
+
+def _waterfall(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray,
+               title: str, x_max: float) -> Any:
     """Render the frequency-vs-time waterfall for one track.
 
     Ground truth in muted grey, the current IBW window as a bright band,
@@ -300,7 +340,7 @@ def _waterfall(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray, t
 
     fig.update_layout(
         title=title, height=330, margin={"l": 40, "r": 10, "t": 40, "b": 30},
-        xaxis={"title": "time (s)", "range": [0, cfg.time.episode_s]},
+        xaxis={"title": "time (s)", "range": [0, x_max]},
         yaxis={"title": "channel", "range": [0, cfg.n_channels]},
         # The colour key under the header names all four colours once, for both
         # panels. A per-chart legend repeats it in different words ("INTERCEPT"
@@ -508,7 +548,12 @@ def main() -> None:
                                    format_func=_agent_option)]
 
         st.divider()
-        speed = st.slider("Slots per frame", 10, 1000, 200, step=10)
+        speed = st.slider(
+            "Slots per frame", 10, 1000, 200, step=10,
+            help="Episode time advanced per redraw. Every panel gets the same "
+                 "budget, so a scheduler that retunes often fits fewer dwells "
+                 "into it -- which is the trade-off being compared.",
+        )
         auto = st.toggle("60-second auto-demo", value=False,
                          help="Plays a scripted scenario unattended.")
 
@@ -551,12 +596,12 @@ def main() -> None:
         st.session_state["running"] = True
 
     # ---------------- advance ---------------- #
-    n_steps = speed if (st.session_state.get("running") or step_once) else 0
+    n_slots = speed if (st.session_state.get("running") or step_once) else 0
     if inject and not st.session_state["injected"]:
         st.session_state["injected"] = True
         st.toast("Pop-up threat injected — watch which scheduler reacts.", icon="⚡")
     for track in tracks.values():
-        _advance(track, cfg, n_steps, interferers)
+        _advance(track, cfg, n_slots, interferers)
 
     # ---------------- header ---------------- #
     st.markdown("### The receiver sees 1 slice of the band at a time. Everything else is unknown.")
@@ -576,12 +621,15 @@ def main() -> None:
     st.progress(min(progress, 1.0), text=f"t = {lead.t * cfg.time.dt_s:.2f} s  /  {cfg.time.episode_s:.0f} s")
 
     # ---------------- panels ---------------- #
+    # Computed once from the lead track: two panels drawn on different time
+    # axes would make the side-by-side comparison a lie, however slight.
+    x_max = _x_max(lead.t * cfg.time.dt_s, cfg.time.episode_s)
     for i, key in enumerate(chosen):
         track = tracks[key]
         col_plot, col_metrics = st.columns([4, 1])
         with col_plot:
             st.plotly_chart(
-                _waterfall(track, cfg, episode, pd_tensor, AGENT_LABELS.get(key, key)),
+                _waterfall(track, cfg, episode, pd_tensor, AGENT_LABELS.get(key, key), x_max),
                 width="stretch", key=f"wf_{i}_{key}",
             )
         with col_metrics:

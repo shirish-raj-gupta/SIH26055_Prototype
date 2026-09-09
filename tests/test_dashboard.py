@@ -45,10 +45,13 @@ def test_track_advances_and_records(setup):
     assert track.t == 0 and not track.done
 
     app._advance(track, cfg, 50, interferers=set())
-    assert len(track.actions) == 50
-    assert len(track.rewards) == 50
-    assert track.t > 0
-    assert track.visit_mask.sum() == 50 * cfg.receiver.ibw_channels
+    # 50 *slots*, not 50 dwells: a dwell spans several slots and a retune costs
+    # more on top, so the dwell count is an outcome here, not the budget.
+    n = len(track.actions)
+    assert n > 0
+    assert len(track.rewards) == n, "a reward was recorded without an action"
+    assert track.t >= 50, f"advanced {track.t} slots, asked for 50"
+    assert track.visit_mask.sum() == n * cfg.receiver.ibw_channels
     assert np.isfinite(track.total_reward)
 
 
@@ -111,8 +114,21 @@ def test_ab_mode_gives_both_tracks_identical_conditions(setup):
 
     app._advance(a, cfg, 300, interferers=set())
     app._advance(b, cfg, 300, interferers=set())
-    # ...but different behaviour.
+
+    # Same elapsed *time*. This is the assertion the original A/B test was
+    # missing: it checked the world and the luck but never the clock, so the
+    # panel spent its life advancing both by a fixed dwell count. Because a
+    # retune costs t_settle slots on top of the dwell, that quietly handed the
+    # restless policy ~74% more of the episode than the incumbent (0.582 s
+    # against 0.334 s at 200 dwells) under a caption promising identical
+    # conditions. Skew is now bounded by one atomic dwell.
+    tolerance = cfg.receiver.t_settle_slots + 4
+    assert abs(a.t - b.t) <= tolerance, f"tracks desynchronised: {a.t} vs {b.t}"
+
+    # ...but different behaviour, and a different number of dwells inside the
+    # same time, which is precisely the cost the incumbent does not pay.
     assert not np.array_equal(np.asarray(a.actions), np.asarray(b.actions))
+    assert len(a.actions) != len(b.actions)
 
 
 def test_waterfall_builds_a_figure(setup):
@@ -120,10 +136,44 @@ def test_waterfall_builds_a_figure(setup):
     track = app._new_track("sequential", cfg, scenario, episode, cfg.run.seed)
     app._advance(track, cfg, 120, interferers=set())
 
-    fig = app._waterfall(track, cfg, episode, pd_tensor, "test")
+    x_max = app._x_max(track.t * cfg.time.dt_s, cfg.time.episode_s)
+    fig = app._waterfall(track, cfg, episode, pd_tensor, "test", x_max)
     assert fig.data, "waterfall produced no traces"
     assert fig.layout.xaxis.title.text == "time (s)"
     assert fig.layout.yaxis.title.text == "channel"
+    assert fig.layout.xaxis.range == (0, x_max)
+
+
+def test_axis_window_never_lags_the_clock(setup):
+    """The window may lead the elapsed time but must never trail it.
+
+    A window shorter than the clock crops the right-hand edge of the
+    waterfall, hiding the most recent intercepts -- the ones an audience is
+    actually watching for -- with no visible sign anything is missing.
+    """
+    cfg, _, _, _ = setup
+    episode_s = cfg.time.episode_s
+    for i in range(0, 1001):
+        elapsed = episode_s * i / 1000.0
+        x = app._x_max(elapsed, episode_s)
+        assert x + 1e-9 >= elapsed, f"axis {x} crops elapsed {elapsed}"
+        assert x <= episode_s + 1e-9, f"axis {x} overruns the episode"
+
+    assert app._x_max(0.0, episode_s) > 0.0, "a zero-width axis cannot render"
+    assert app._x_max(episode_s, episode_s) == pytest.approx(episode_s)
+    # Past the horizon the axis must pin, not keep growing.
+    assert app._x_max(episode_s * 3, episode_s) == pytest.approx(episode_s)
+
+
+def test_axis_window_is_monotonic_and_steps_rather_than_slides(setup):
+    """It grows, never shrinks, and changes only a handful of times."""
+    cfg, _, _, _ = setup
+    episode_s = cfg.time.episode_s
+    seen = [app._x_max(episode_s * i / 500.0, episode_s) for i in range(501)]
+
+    assert seen == sorted(seen), "axis window went backwards"
+    # Ten tenths: a window that changed every frame would be far larger.
+    assert len(set(seen)) <= 11, f"axis relabels too often: {sorted(set(seen))}"
 
 
 def test_track_stops_cleanly_at_the_horizon(setup):
