@@ -205,5 +205,5 @@ pip install -e ".[ml,viz,demo]"
 make benchmark                          # 30 seeds × 3 tiers → reports/
 python -m smartscan.cli estimate        # scan-period estimator validation
 python scripts/figures_of_merit.py      # the figures-of-merit table
-pytest -q                               # 194 tests
+pytest -q                               # 200 tests
 ```

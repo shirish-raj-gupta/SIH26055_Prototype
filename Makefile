@@ -12,7 +12,9 @@ REPORTS ?= reports
 .DEFAULT_GOAL := help
 .PHONY: help install install-min demo smoke test test-fast test-acceptance lint fmt \
         benchmark benchmark-medium benchmark-easy benchmark-hard grid train-predictor train-ppo train-dqn \
-        train-all estimate ablate reproduce reproduce-easy clean coverage \n        dataset dataset-smoke dataset-verify publish publish-dry publish-models \n        credentials external info
+        train-all estimate ablate reproduce reproduce-easy clean coverage figures \
+        dataset dataset-smoke dataset-verify publish publish-dry publish-models \
+        credentials external info
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -69,7 +71,8 @@ benchmark:  ## Full grid -> results.parquet, leaderboard.md/.tex and all 7 figur
 	$(CLI) ablate --config configs/medium.yaml --which reward --n-seeds 8 --out $(REPORTS)/ablation.json
 	$(CLI) estimate --config configs/scan_on_scan.yaml --n-seeds 6 --out $(REPORTS)/scan_on_scan.json
 	$(CLI) grid --tiers easy,medium,hard --n-seeds $(SEEDS) --n-jobs $(JOBS) --out $(REPORTS)
-	@echo "artefacts -> $(REPORTS)/  (results.parquet, leaderboard.md, leaderboard.tex, f1..f7)"
+	$(PY) scripts/figures_of_merit.py
+	@echo "artefacts -> $(REPORTS)/  (results.parquet, leaderboard.md, figures_of_merit.md, f1..f7)"
 
 benchmark-medium:  ## Paired benchmark on MEDIUM only
 	$(CLI) benchmark --config configs/medium.yaml --n-seeds $(SEEDS) --n-jobs $(JOBS) --out $(REPORTS)
@@ -85,6 +88,9 @@ estimate:  ## Scan-period estimator validation (acceptance test 4)
 
 ablate:  ## Reward / IBW / retune / density / belief sweeps
 	$(CLI) ablate --config configs/medium.yaml --which all --n-seeds 8 --out $(REPORTS)/ablation.json
+
+figures:  ## The problem statement's 7 figures of merit -> figures_of_merit.md/.json
+	$(PY) scripts/figures_of_merit.py
 
 # --------------------------------------------------------------------------- #
 # Training (needs the `ml` extra)
@@ -111,7 +117,8 @@ reproduce:  ## Regenerate every headline number (analytic schedulers, all tiers)
 	$(CLI) reproduce --tiers easy,medium,hard --n-seeds $(SEEDS) --n-jobs $(JOBS) --out $(REPORTS)
 	$(CLI) estimate --config configs/scan_on_scan.yaml --n-seeds 10 --out $(REPORTS)/scan_on_scan.json
 	$(CLI) ablate --config configs/medium.yaml --which all --n-seeds 8 --out $(REPORTS)/ablation.json
-	@echo "headline numbers -> $(REPORTS)/leaderboard.md"
+	$(PY) scripts/figures_of_merit.py
+	@echo "headline numbers -> $(REPORTS)/leaderboard.md and $(REPORTS)/figures_of_merit.md"
 
 # --------------------------------------------------------------------------- #
 # Dataset and publication

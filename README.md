@@ -14,7 +14,7 @@ it is *unknown*. Everything here follows from that.
 pip install -e ".[ml,viz,demo]"
 make demo         # live dashboard in a browser — offline, one command
 make benchmark    # results.parquet, leaderboard.md/.tex and figures F1–F7
-pytest -q         # 194 tests
+pytest -q         # 200 tests
 ```
 
 ---
