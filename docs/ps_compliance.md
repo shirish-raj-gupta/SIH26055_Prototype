@@ -109,6 +109,36 @@ finding: **for this problem, learning online beats learning offline.**
 
 ---
 
+### Losing time to nonthreatening emitters — the PS's complaint, measured
+
+> *"Open loop strategies focus only on this requirement and **may lose time to
+> nonthreatening emitters** by not giving time to new or threatening ones."*
+
+The `hard` tier makes this cost real: 5 of 30 emitters are interferers and
+`w5_interferer_dwell` is doubled to 2.0, so every dwell spent on a decoy is
+charged. That drives **every** policy's total return negative on `hard`, which
+makes the differences between them the thing to read rather than the sign.
+
+Dwells wasted on decoys, hard tier, 8 seeds:
+
+| Scheduler | mean return | mean decoy dwells | vs open-loop sweep | seeds won |
+|---|---|---|---|---|
+| `phase_locked` | −380.6 | **389.4** | **−58.1 %** | 8/8 |
+| `whittle` | −509.5 | **448.4** | **−51.8 %** | 8/8 |
+| `coprime_sweep` | −652.2 | 514.6 | −44.7 % | 8/8 |
+| `sequential` (open loop) | −1455.8 | 930.0 | — | — |
+
+The closed-loop schedulers waste roughly **half** as much time on nonthreatening
+emitters as the open-loop sweep, on every seed tested. This is the problem
+statement's stated failure mode of open-loop scanning, quantified, and it is the
+metric on which the closed-loop advantage is largest.
+
+Per-term decomposition of the return, regenerated with the table:
+[`reports/figures_of_merit.md`](../reports/figures_of_merit.md). Staleness
+contributes under a point — it is not what drives the sign.
+
+---
+
 ## 5. "Approaches to intercept a periodic scan receiver optimally"
 
 `smartscan/analysis/scan_on_scan.py` answers this deterministically rather than

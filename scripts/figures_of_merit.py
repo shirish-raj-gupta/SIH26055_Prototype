@@ -87,6 +87,87 @@ def _detection_figures(tier: str) -> dict[str, float]:
     }
 
 
+def _reward_decomposition(tier: str, agents: tuple[str, ...]) -> dict[str, dict]:
+    """Split figure of merit 5 into the terms that produced it.
+
+    The total return goes negative on the hard tier and a bare negative number
+    invites the wrong conclusion. It is not a broken scheduler and it is not
+    the staleness penalty: it is ``w5_interferer_dwell``, which the hard config
+    doubles to 2.0, charged on every dwell that lands on a decoy. Splitting the
+    sum is the only way to say that with evidence rather than assertion.
+
+    Implemented by swapping the accountant for a tallying subclass, since
+    ``run_episode`` constructs its own and returns only the summed reward.
+    """
+    import smartscan.runner as runner
+    from smartscan.agents import build_agent
+    from smartscan.config import load_config
+    from smartscan.env.rf_environment import build_episode, generate_scenario
+
+    built: list = []
+
+    class _Tally(runner.RewardAccountant):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            built.append(self)
+            self.terms = dict.fromkeys(
+                ("new", "reconfirm", "retune", "interferer", "staleness"), 0.0)
+            self.counts = dict.fromkeys(("new", "reconfirm", "retune", "interferer"), 0)
+
+        def step(self, detected_ids, retuned, interferer_dwell, max_staleness):  # noqa: ANN001
+            c = self.cfg
+            for eid in np.unique(detected_ids):
+                eid = int(eid)
+                if eid <= 0:
+                    continue
+                if eid not in self.seen:
+                    self.terms["new"] += c.w1_threat_intercept * self.threat.get(eid, 0.5) + c.w2_novelty
+                    self.counts["new"] += 1
+                elif self.reconfirms.get(eid, 0) < c.reconfirm_cap_per_emitter:
+                    self.terms["reconfirm"] += c.w3_reconfirm
+                    self.counts["reconfirm"] += 1
+            if retuned:
+                self.terms["retune"] -= c.w4_retune
+                self.counts["retune"] += 1
+            if interferer_dwell:
+                self.terms["interferer"] -= c.w5_interferer_dwell
+                self.counts["interferer"] += 1
+            st = c.w6_staleness * (max_staleness / max(self.n_slots, 1))
+            if c.normalise_by_episode:
+                st /= max(self.n_slots, 1)
+            self.terms["staleness"] -= st
+            return super().step(detected_ids, retuned, interferer_dwell, max_staleness)
+
+    cfg = load_config(f"{tier}.yaml")
+    seed = cfg.run.seed
+    scenario = generate_scenario(seed, config=cfg)
+    episode = build_episode(scenario)
+    out: dict[str, dict] = {
+        "_n_interferers": sum(1 for t in episode.truth if t.is_interferer),
+        "_n_emitters": len(episode.truth),
+        "_w5": float(cfg.reward.w5_interferer_dwell),
+        "_seed": int(seed),
+    }
+    for agent in agents:
+        original = runner.RewardAccountant
+        runner.RewardAccountant = _Tally
+        try:
+            built.clear()
+            result = runner.run_episode(
+                cfg, seed, build_agent(agent, cfg, seed, scenario),
+                scenario=scenario, episode=episode,
+            )
+        finally:
+            runner.RewardAccountant = original
+        tally = built[-1]
+        out[agent] = {
+            "total": float(np.sum(result.rewards)),
+            "terms": dict(tally.terms),
+            "counts": dict(tally.counts),
+        }
+    return out
+
+
 def _predictor_figures(tier: str) -> dict[str, float]:
     """Metric 8, straight from the shipped training history."""
     path = CKPT / f"predictor_{tier}_history.json"
@@ -147,6 +228,8 @@ def collect() -> dict:
         }
         tier_out.update(_detection_figures(tier))
         tier_out["predictor"] = _predictor_figures(tier)
+        tier_out["reward_decomposition"] = _reward_decomposition(
+            tier, (HEADLINE_AGENT, "sequential"))
         out["tiers"][tier] = tier_out
     return out
 
@@ -241,6 +324,51 @@ def render(data: dict) -> str:
     A(f"- Median relative period error, Lomb-Scargle: **{_fmt(se.get('median_rel_error_lomb_scargle'), '.4%')}**")
     A(f"- Median relative period error, SDIF: **{_fmt(se.get('median_rel_error_sdif'), '.2%')}**")
     A(f"- Median arrival-time error: **{_fmt(se.get('median_arrival_time_error_s'), '.3f')} s**")
+    A("")
+    A("### Reading note on figure of merit 5 — why the return is negative on `hard`")
+    A("")
+    A("A negative total return does not mean the scheduler failed. Splitting the sum")
+    A("into the terms that produced it says what it does mean:")
+    A("")
+    for t in tiers:
+        dec = data["tiers"][t].get("reward_decomposition") or {}
+        if not dec:
+            continue
+        ha = dec.get(data["headline_agent"], {})
+        terms, counts = ha.get("terms", {}), ha.get("counts", {})
+        if not terms:
+            continue
+        A(f"**`{t}`** — {dec.get('_n_interferers')} of {dec.get('_n_emitters')} emitters are "
+          f"interferers, `w5_interferer_dwell` = {_fmt(dec.get('_w5'), '.1f')}, seed {dec.get('_seed')}:")
+        A("")
+        A("| term | contribution | events |")
+        A("|---|---|---|")
+        for key in sorted(terms, key=lambda k: -abs(terms[k])):
+            cnt = counts.get(key)
+            A(f"| {key} | {terms[key]:+.1f} | {cnt if cnt is not None else '—'} |")
+        A(f"| **total** | **{ha.get('total', float('nan')):+.1f}** | |")
+        A("")
+
+    # The comparison is the point: everyone is negative here, and the open-loop
+    # sweep is the one that pays most for it.
+    hard = (data["tiers"].get("hard") or {}).get("reward_decomposition") or {}
+    ha, base = hard.get(data["headline_agent"]), hard.get("sequential")
+    if ha and base:
+        n_a = ha["counts"].get("interferer", 0)
+        n_b = base["counts"].get("interferer", 0)
+        if n_b:
+            A(f"On `hard` the penalty is charged {n_a} times against "
+              f"`{data['headline_agent']}` and {n_b} times against the `sequential` "
+              f"sweep — **{(1 - n_a / n_b):.0%} fewer dwells wasted on decoys** "
+              f"({base['total']:+.1f} against {ha['total']:+.1f} total return).")
+            A("")
+    A("This is the problem statement's own complaint about open-loop scanning —")
+    A("*\"may lose time to nonthreatening emitters by not giving time to new or")
+    A("threatening ones\"* — measured directly. The `hard` config doubles")
+    A("`w5_interferer_dwell` to 2.0 precisely so that decoys cost what they should,")
+    A("which makes every policy's return negative and the *differences* between them")
+    A("the thing to read. Staleness, by contrast, contributes under a point: it is")
+    A("not what drives the sign.")
     A("")
     A("### Reading note on figure of merit 6")
     A("")

@@ -84,6 +84,23 @@ on emitters already found) is not the metric it is judged on (distinct emitters
 *ever* found). For this problem, **learning online beats learning offline**, and
 that is the result rather than an apology for one.
 
+### Losing time to nonthreatening emitters
+
+The PS's complaint about open-loop scanning is that it *"may lose time to
+nonthreatening emitters"*. The `hard` tier charges for exactly that — 5 of 30
+emitters are decoys and the interferer penalty is doubled — which drives every
+policy's total return negative and makes the *differences* the thing to read.
+Dwells wasted on decoys, 8 seeds:
+
+| Scheduler | decoy dwells | vs open-loop sweep | seeds won |
+|---|---|---|---|
+| `phase_locked` | **389.4** | **−58.1 %** | 8/8 |
+| `whittle` | **448.4** | **−51.8 %** | 8/8 |
+| `sequential` (open loop) | 930.0 | — | — |
+
+Half the time wasted on decoys, on every seed tested — the PS's stated failure
+mode, quantified.
+
 Clause-by-clause mapping, including all seven figures of merit:
 [`docs/ps_compliance.md`](docs/ps_compliance.md) ·
 [`reports/figures_of_merit.md`](reports/figures_of_merit.md).

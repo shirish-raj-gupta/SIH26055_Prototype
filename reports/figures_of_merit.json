@@ -32,6 +32,44 @@
     "positive_rate": 0.03591861979166667,
     "ap_lift_over_base_rate": 22.367302434944033,
     "threshold": 0.5
+   },
+   "reward_decomposition": {
+    "_n_interferers": 0,
+    "_n_emitters": 5,
+    "_w5": 1.0,
+    "_seed": 20260902,
+    "whittle": {
+     "total": 69.18779396836672,
+     "terms": {
+      "new": 49.59292516836673,
+      "reconfirm": 50.0,
+      "retune": -30.12000000000191,
+      "interferer": 0.0,
+      "staleness": -0.28513120000000075
+     },
+     "counts": {
+      "new": 5,
+      "reconfirm": 100,
+      "retune": 3012,
+      "interferer": 0
+     }
+    },
+    "sequential": {
+     "total": 78.90490216836673,
+     "terms": {
+      "new": 49.59292516836673,
+      "reconfirm": 50.0,
+      "retune": -20.000000000000327,
+      "interferer": 0.0,
+      "staleness": -0.6880229999999997
+     },
+     "counts": {
+      "new": 5,
+      "reconfirm": 100,
+      "retune": 2000,
+      "interferer": 0
+     }
+    }
    }
   },
   "medium": {
@@ -65,6 +103,44 @@
     "positive_rate": 0.08625846354166666,
     "ap_lift_over_base_rate": 6.151197963827897,
     "threshold": 0.5
+   },
+   "reward_decomposition": {
+    "_n_interferers": 0,
+    "_n_emitters": 15,
+    "_w5": 1.0,
+    "_seed": 20260902,
+    "whittle": {
+     "total": 231.98144770245716,
+     "terms": {
+      "new": 165.11154170245715,
+      "reconfirm": 101.0,
+      "retune": -31.85000000000218,
+      "interferer": 0.0,
+      "staleness": -2.280094
+     },
+     "counts": {
+      "new": 14,
+      "reconfirm": 202,
+      "retune": 3185,
+      "interferer": 0
+     }
+    },
+    "sequential": {
+     "total": 250.2407779444743,
+     "terms": {
+      "new": 165.42880094447423,
+      "reconfirm": 105.5,
+      "retune": -20.000000000000327,
+      "interferer": 0.0,
+      "staleness": -0.6880229999999997
+     },
+     "counts": {
+      "new": 14,
+      "reconfirm": 211,
+      "retune": 2000,
+      "interferer": 0
+     }
+    }
    }
   },
   "hard": {
@@ -98,6 +174,44 @@
     "positive_rate": 0.15195963541666666,
     "ap_lift_over_base_rate": 3.301497516395825,
     "threshold": 0.5
+   },
+   "reward_decomposition": {
+    "_n_interferers": 5,
+    "_n_emitters": 30,
+    "_w5": 2.0,
+    "_seed": 20260902,
+    "whittle": {
+     "total": -678.1489546994491,
+     "terms": {
+      "new": 204.55231750055088,
+      "reconfirm": 159.5,
+      "retune": -31.28000000000209,
+      "interferer": -1010.0,
+      "staleness": -0.9212722000000003
+     },
+     "counts": {
+      "new": 20,
+      "reconfirm": 319,
+      "retune": 3128,
+      "interferer": 505
+     }
+    },
+    "sequential": {
+     "total": -1540.6315528723726,
+     "terms": {
+      "new": 250.05647012762725,
+      "reconfirm": 150.0,
+      "retune": -20.000000000000327,
+      "interferer": -1920.0,
+      "staleness": -0.6880229999999997
+     },
+     "counts": {
+      "new": 24,
+      "reconfirm": 300,
+      "retune": 2000,
+      "interferer": 960
+     }
+    }
    }
   }
  },

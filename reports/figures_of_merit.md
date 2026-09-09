@@ -45,6 +45,54 @@ truth to predict arrival times against.
 - Median relative period error, SDIF: **23.81%**
 - Median arrival-time error: **0.142 s**
 
+### Reading note on figure of merit 5 — why the return is negative on `hard`
+
+A negative total return does not mean the scheduler failed. Splitting the sum
+into the terms that produced it says what it does mean:
+
+**`easy`** — 0 of 5 emitters are interferers, `w5_interferer_dwell` = 1.0, seed 20260902:
+
+| term | contribution | events |
+|---|---|---|
+| reconfirm | +50.0 | 100 |
+| new | +49.6 | 5 |
+| retune | -30.1 | 3012 |
+| staleness | -0.3 | — |
+| interferer | +0.0 | 0 |
+| **total** | **+69.2** | |
+
+**`medium`** — 0 of 15 emitters are interferers, `w5_interferer_dwell` = 1.0, seed 20260902:
+
+| term | contribution | events |
+|---|---|---|
+| new | +165.1 | 14 |
+| reconfirm | +101.0 | 202 |
+| retune | -31.9 | 3185 |
+| staleness | -2.3 | — |
+| interferer | +0.0 | 0 |
+| **total** | **+232.0** | |
+
+**`hard`** — 5 of 30 emitters are interferers, `w5_interferer_dwell` = 2.0, seed 20260902:
+
+| term | contribution | events |
+|---|---|---|
+| interferer | -1010.0 | 505 |
+| new | +204.6 | 20 |
+| reconfirm | +159.5 | 319 |
+| retune | -31.3 | 3128 |
+| staleness | -0.9 | — |
+| **total** | **-678.1** | |
+
+On `hard` the penalty is charged 505 times against `whittle` and 960 times against the `sequential` sweep — **47% fewer dwells wasted on decoys** (-1540.6 against -678.1 total return).
+
+This is the problem statement's own complaint about open-loop scanning —
+*"may lose time to nonthreatening emitters by not giving time to new or
+threatening ones"* — measured directly. The `hard` config doubles
+`w5_interferer_dwell` to 2.0 precisely so that decoys cost what they should,
+which makes every policy's return negative and the *differences* between them
+the thing to read. Staleness, by contrast, contributes under a point: it is
+not what drives the sign.
+
 ### Reading note on figure of merit 6
 
 The problem statement asks for *"percentage of correct predictions"*, and it is
