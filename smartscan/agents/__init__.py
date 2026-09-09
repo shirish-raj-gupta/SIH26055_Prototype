@@ -61,6 +61,10 @@ register("phase_locked", _lazy("smartscan.analysis.scan_on_scan", "PhaseLockedSc
 register("predictor", _lazy("smartscan.agents.predictors", "SequencePredictorScheduler"))
 register("predictor_de", _lazy("smartscan.agents.predictors",
                                "DwellEfficientPredictorScheduler"))
+register("predictor_gc", _lazy("smartscan.agents.predictors",
+                               "GuaranteedCoveragePredictorScheduler"))
+register("whittle_predictor", _lazy("smartscan.agents.predictors",
+                                   "WhittlePredictorScheduler"))
 register("dqn", _lazy("smartscan.agents.rl_agents", "DQNScheduler"))
 register("ppo", _lazy("smartscan.agents.rl_agents", "PPOScheduler"))
 register("hybrid", _lazy("smartscan.agents.hybrid", "HybridScheduler"))

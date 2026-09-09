@@ -535,6 +535,16 @@ class AgentsConfig(_Base):
     #: measured, not assumed. Swept in eval/ablation.py.
     coverage_weight: float = 1.0
 
+    #: Fraction of slots reserved for coverage by *slot-budget* policies
+    #: (``predictor_gc``), as opposed to the additive ``coverage_weight`` used by
+    #: score-blending ones. The distinction matters: in an additive score the
+    #: exploit and coverage terms compete on one scalar, so whichever is larger
+    #: wins globally and the other is effectively switched off -- which is how a
+    #: sharper predictor silently stopped covering the band. A reserved budget
+    #: cannot be dominated, so both properties hold by construction and the knob
+    #: means the same thing whatever the predictor does.
+    coverage_fraction: float = 0.5
+
     sequential_sweep: SequentialSweepConfig = SequentialSweepConfig()
     random_scan: RandomScanConfig = RandomScanConfig()
     priority_round_robin: PriorityRRConfig = PriorityRRConfig()

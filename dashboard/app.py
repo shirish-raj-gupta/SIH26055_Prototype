@@ -79,6 +79,7 @@ AGENT_LABELS: dict[str, str] = {
     # the WORST policy measured, missing 126 of 146.
     "predictor": "Occupancy predictor (transformer)",
     "predictor_de": "Occupancy predictor (dwell-efficient)",
+    "predictor_gc": "Occupancy predictor (guaranteed coverage)",
     "dqn": "Double-DQN (duelling, masked)",
     "ppo": "PPO (from scratch)",
     "hybrid": "Hybrid: predictor + PPO",

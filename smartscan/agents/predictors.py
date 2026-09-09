@@ -1149,3 +1149,207 @@ class DwellEfficientPredictorScheduler(SequencePredictorScheduler):
         action = self.argmax_legal(self.window_value(value), self.retune_penalty)
         self.last_action = action
         return action
+
+
+class GuaranteedCoveragePredictorScheduler(SequencePredictorScheduler):
+    """The predictor at full strength, with coverage reserved rather than blended.
+
+    Both earlier attempts failed the same way, from opposite ends. The shipped
+    ``predictor`` adds a staleness term to the occupancy probability; a sharper
+    model widens ``P̂`` until that term cannot compete, and the policy parks
+    (hazard 0.337, 85 of 98 emitters never intercepted). ``predictor_de``
+    normalises ``P̂`` to its own range so staleness *can* compete; coverage
+    recovers (0.909, 48/98) but the magnitude information goes with it and TWIR
+    falls below the sequential baseline. In an additive score the two terms
+    compete on a single scalar, so whichever is larger wins **globally** and the
+    other is effectively switched off. Re-weighting only moves which one loses.
+
+    So this policy does not blend them. It splits the *slot budget*:
+
+    * a fraction ``agents.coverage_fraction`` of slots are **coverage slots**,
+      spent on the most overdue window, which bounds the revisit gap directly;
+    * the rest are **exploit slots**, spent on the predictor's argmax at full
+      magnitude -- no normalisation, so "much more likely" still means it.
+
+    Neither property can be dominated by the other, because they are not
+    competing for the same slots. TWIR comes from the exploit slots and coverage
+    comes from the reserved ones, and the knob is the split.
+
+    Which slots are coverage slots is decided by a golden-ratio Weyl sequence,
+    ``frac(k·φ⁻¹) < ρ``, rather than at random. By the three-distance theorem
+    that is the worst-approximable choice and so minimises the largest gap
+    between coverage slots for every prefix -- the same argument
+    ``CoprimeSweepScheduler`` rests on. A Bernoulli draw would give the right
+    fraction on average while allowing long coverage-free runs, which is exactly
+    the failure being designed out.
+
+    Novelty is deliberately **not** carried over from ``predictor_de``. The two
+    metrics want opposite things about an emitter already found: the log-rank
+    test counts only *first* intercepts, so re-looking is worthless, while TWIR
+    counts *every* threat-weighted intercept, so re-looking is valuable. A
+    discount on harvested channels therefore buys coverage by destroying the
+    channels that generate TWIR. Measured, before it was removed: at
+    ``rho = 0.2``, with 80 % of slots spent exploiting, TWIR came out at 0.0053
+    -- *below* the variant spending far fewer slots on the predictor, which
+    should be impossible if the exploit slots were exploiting properly. A single
+    policy can serve both metrics only by separating them **in time**, which the
+    slot budget already does; novelty re-mixed them and undid it. So exploit
+    slots exploit, coverage slots cover, and neither apologises for the other.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.coverage_fraction = float(
+            np.clip(self.cfg.agents.coverage_fraction, 0.0, 1.0)
+        )
+        #: Golden-ratio conjugate: the worst-approximable rotation number.
+        self._phi_inv = (np.sqrt(5.0) - 1.0) / 2.0
+        self._k = 0
+
+    def reset(self) -> None:
+        """Clear the window and restart the coverage-slot sequence."""
+        super().reset()
+        self._k = 0
+
+    def act(self, belief: BeliefState, t: int) -> int:
+        """Spend a reserved slot on coverage, otherwise on the predictor.
+
+        Args:
+            belief: Shared belief state.
+            t: Current slot index.
+
+        Returns:
+            Index of the chosen channel.
+        """
+        if self._fallback is not None:
+            action = self._fallback.act(belief, t)
+            self.last_action = action
+            return action
+
+        self._k += 1
+        if (self._k * self._phi_inv) % 1.0 < self.coverage_fraction:
+            # Coverage slot: the most overdue window, which is what bounds the
+            # revisit gap. The predictor is not consulted, so it cannot veto.
+            #
+            # window_max, not window_value: summing staleness over a k-wide
+            # window dilutes a single badly-neglected channel's urgency to
+            # 1/k of its true size behind ordinarily-fresh window-mates, so
+            # this branch could keep picking a window of several moderately
+            # stale channels over the one window holding the single most
+            # overdue channel -- undermining the exact revisit-gap bound it
+            # exists to guarantee. Taking the max means the most starved
+            # channel decides its window's urgency on its own.
+            stale = belief.time_since_visit.astype(np.float64)
+            action_score = self.window_max(stale)
+        else:
+            # Exploit slot: raw probabilities, threat-weighted, and NOT
+            # discounted by prior harvest -- see the class docstring. Summed
+            # correctly here -- a window where several channels show occupancy
+            # genuinely is more worth a dwell than one where a single channel
+            # does, which is the opposite of the staleness case above.
+            p = self.predict(belief)
+            value = p * (1.0 - 0.9 * belief.interferer_score())
+            action_score = self.window_value(value)
+
+        action = self.argmax_legal(action_score, self.retune_penalty)
+        self.last_action = action
+        return action
+
+
+class WhittlePredictorScheduler(SequencePredictorScheduler):
+    """Whittle for coverage, the predictor for interception, split by slot.
+
+    ``predictor_gc`` established that reserving a slot budget stops the two
+    objectives fighting over one scalar. It still lost to ``whittle`` overall,
+    and the sweep says why: at rho = 0.6 it reached 50 of 98 never-intercepted
+    against ``whittle``'s 45, while giving up TWIR to get there. Its coverage
+    slots spend themselves on **pure max-staleness**, which is a deliberately
+    unintelligent coverage rule -- it looks only at how long ago a channel was
+    visited and ignores everything the belief has learned about whether anything
+    is likely to be *there*. ``whittle`` covers the band using a restless-bandit
+    index that does use the belief, and covers it better.
+
+    So the composition here stops reinventing the coverage half and delegates it:
+
+    * coverage slots call :class:`~smartscan.agents.whittle.WhittleIndexScheduler`,
+      which is the strongest coverage policy this project has measured;
+    * exploit slots take the predictor's threat-weighted argmax at full
+      magnitude, which is the strongest interception signal it has measured.
+
+    The intended result is a policy that is ``whittle`` wherever ``whittle`` is
+    good and the predictor wherever the predictor is good, rather than a
+    compromise that is neither. Whether it actually dominates is a measurement,
+    not a claim, and the number that settles it is never-intercepted at equal or
+    better TWIR.
+
+    The Weyl-sequence slot assignment is unchanged from ``predictor_gc``: which
+    slots are coverage slots is decided by ``frac(k·φ⁻¹) < ρ``, the
+    worst-approximable rotation, so coverage slots are spread as evenly as any
+    infinite sequence can be and no long coverage-free run is possible.
+
+    The delegate shares the same belief object, so nothing is duplicated: it sees
+    every observation this policy's dwells produce, including the ones spent on
+    the predictor's choices.
+    """
+
+    def __init__(
+        self,
+        config: Config,
+        seed: int = 0,
+        name: str | None = None,
+        checkpoint: str | Path | None = None,
+        model: Any = None,
+    ) -> None:
+        super().__init__(config, seed, name, checkpoint, model)
+        from smartscan.agents.whittle import WhittleIndexScheduler
+
+        self.coverage_fraction = float(
+            np.clip(self.cfg.agents.coverage_fraction, 0.0, 1.0)
+        )
+        self._phi_inv = (np.sqrt(5.0) - 1.0) / 2.0
+        self._k = 0
+        #: Coverage delegate. Reads the same belief, so it is never stale.
+        self._coverage = WhittleIndexScheduler(config, seed)
+
+    def reset(self) -> None:
+        """Reset the window, the slot counter and the coverage delegate.
+
+        The base constructor calls ``reset`` before this subclass has built its
+        delegate, so the delegate is reset only once it exists.
+        """
+        super().reset()
+        self._k = 0
+        coverage = getattr(self, "_coverage", None)
+        if coverage is not None:
+            coverage.reset()
+
+    def act(self, belief: BeliefState, t: int) -> int:
+        """Delegate a reserved slot to Whittle, otherwise use the predictor.
+
+        Args:
+            belief: Shared belief state.
+            t: Current slot index.
+
+        Returns:
+            Index of the chosen channel.
+        """
+        if self._fallback is not None:
+            action = self._fallback.act(belief, t)
+            self.last_action = action
+            return action
+
+        self._k += 1
+        if (self._k * self._phi_inv) % 1.0 < self.coverage_fraction:
+            # Coverage slot: hand the decision to the better coverage policy.
+            # `t` is passed through unchanged so its index-refresh schedule
+            # stays on wall-clock slots rather than on how often it is called.
+            action = self._coverage.act(belief, t)
+        else:
+            # Exploit slot: threat-weighted occupancy at full magnitude.
+            p = self.predict(belief)
+            value = p * (1.0 - 0.9 * belief.interferer_score())
+            action = self.argmax_legal(self.window_value(value), self.retune_penalty)
+
+        self.last_action = action
+        return action
+

@@ -426,3 +426,60 @@ def test_dwell_efficient_value_decays_with_harvest(cfg):
 
     assert value[0] < value[2], "harvested channel should rank below its unharvested twin"
     assert value[0] > 0.0, "novelty discounts, it must not zero a re-activating emitter"
+
+
+# --------------------------------------------------------------------------- #
+# window_max, and the guaranteed-coverage predictor's coverage-slot branch
+# that depends on it: window_value SUMS a per-channel score over a window's
+# k channels, which is right for occupancy (more channels showing signal
+# genuinely is more worth a dwell) and wrong for urgency (a single badly-
+# neglected channel's push toward selection gets diluted to 1/k of its true
+# size by ordinarily-fresh window-mates).
+# --------------------------------------------------------------------------- #
+def test_window_max_takes_worst_member_not_sum(cfg):
+    """window_max must differ from window_value exactly where dilution matters."""
+    agent = build_agent("sequential", cfg, seed=0)
+    a = int(np.flatnonzero(agent.legal)[0])
+    window = agent.windows[a]
+    assert len(window) >= 2, "test needs a multi-channel window"
+
+    per_channel = np.zeros(agent.n_channels)
+    per_channel[window[0]] = 100.0                              # one badly-neglected channel
+    per_channel[window[1:]] = 1.0                                # window-mates ordinarily fresh
+
+    summed = agent.window_value(per_channel)[a]
+    worst = agent.window_max(per_channel)[a]
+    assert worst == pytest.approx(100.0)
+    assert summed == pytest.approx(100.0 + 1.0 * (len(window) - 1))
+    assert worst < summed, "the single starved channel must not be diluted by its window-mates"
+
+
+def test_guaranteed_coverage_prefers_the_single_starved_channel(cfg):
+    """The coverage-slot branch must not be outbid by a merely-collectively-staler window.
+
+    A window holding ONE very-overdue channel among
+    fresh window-mates has a smaller SUM than a competing window whose several
+    members are each moderately stale -- but the single overdue channel is the
+    one the revisit-gap guarantee actually needs picked. window_value (the
+    diluted aggregation) picks the wrong window here; window_max (what
+    GuaranteedCoveragePredictorScheduler actually uses) picks the right one.
+    """
+    agent = build_agent("predictor_gc", cfg, seed=0)
+    legal = np.flatnonzero(agent.legal)
+    a_starved, a_crowded = int(legal[0]), int(legal[len(legal) // 2])
+    w_starved, w_crowded = agent.windows[a_starved], agent.windows[a_crowded]
+    assert not set(w_starved) & set(w_crowded), "need two disjoint windows"
+
+    stale = np.full(agent.n_channels, 1.0)
+    stale[w_starved[0]] = 40.0                                   # one channel, badly overdue
+    stale[w_crowded] = 12.0                                      # every member, moderately overdue
+
+    diluted = agent.window_value(stale)
+    fixed = agent.window_max(stale)
+    assert diluted[a_crowded] > diluted[a_starved], (
+        "the diluted sum must indeed favour the collectively-staler window -- "
+        "otherwise this is not exercising the bug"
+    )
+    assert fixed[a_starved] > fixed[a_crowded], (
+        "the fix must favour the window holding the single most overdue channel"
+    )

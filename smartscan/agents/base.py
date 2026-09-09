@@ -124,6 +124,32 @@ class Scheduler(ABC):
         vals[self.legal] = np.asarray(per_channel, dtype=np.float64)[w].sum(axis=1)
         return vals
 
+    def window_max(self, per_channel: np.ndarray) -> np.ndarray:
+        """Take the worst (max) per-channel score over each action's window.
+
+        ``window_value`` sums, which is right for a quantity where "more
+        channels showing signal" genuinely means "more worth dwelling here" --
+        occupancy probability, say. It is wrong for an urgency signal: summing
+        staleness over a ``k``-wide window means one badly-neglected channel's
+        push toward selection is diluted to ``1/k`` of its true size by
+        ordinarily-fresh window-mates, so a channel can in principle be
+        outbid forever by a window whose *members* are individually less
+        stale but collectively larger in sum. Taking the max instead means a
+        single starved channel can force its whole window's score up by the
+        full amount its own staleness warrants, which is what an
+        anti-starvation guarantee requires. Illegal actions receive ``-inf``.
+
+        Args:
+            per_channel: Float array of shape ``(B,)``.
+
+        Returns:
+            Float64 array of shape ``(B,)`` of window maxima.
+        """
+        vals = np.full(self.n_channels, -np.inf, dtype=np.float64)
+        w = self.windows[self.legal]
+        vals[self.legal] = np.asarray(per_channel, dtype=np.float64)[w].max(axis=1)
+        return vals
+
     def argmax_legal(self, scores: np.ndarray, retune_penalty: float = 0.0) -> int:
         """Return the best legal action, optionally charging for a retune.
 
