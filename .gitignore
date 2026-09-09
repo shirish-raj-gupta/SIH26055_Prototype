@@ -63,6 +63,12 @@ reports/*
 !reports/latency_budget.json
 !reports/predictor_replication.json
 !reports/robustness.json
+!reports/scan_on_scan.json
+# The problem statement's figures of merit, in one auditable table. Both
+# halves ship: the markdown is what a reader opens, the json is what a
+# script re-checks.
+!reports/figures_of_merit.json
+!reports/figures_of_merit.md
 # Figures F1-F7, referenced from the README and the architecture note.
 !reports/*.png
 /build/

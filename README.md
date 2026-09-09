@@ -14,7 +14,7 @@ it is *unknown*. Everything here follows from that.
 pip install -e ".[ml,viz,demo]"
 make demo         # live dashboard in a browser — offline, one command
 make benchmark    # results.parquet, leaderboard.md/.tex and figures F1–F7
-pytest -q         # 175 tests
+pytest -q         # 194 tests
 ```
 
 ---
@@ -48,6 +48,48 @@ Derivations: [`docs/theory.md`](docs/theory.md).
 
 ---
 
+## "Machine learning based ES receiver scheduler" — what learns, and when
+
+The problem statement asks for a scheduler built with machine learning, for a
+world with **no prior reliable intelligence** about the emitters. Those two
+constraints pull against each other, and resolving them is the main design
+decision here.
+
+A network trained offline encodes exactly the prior intelligence the problem
+says you do not have. So the headline scheduler, `whittle`, learns **online**:
+it starts every mission knowing nothing, maintains a discounted-Bayesian belief
+over channel occupancy updated purely from its own hits and misses, and computes
+a Whittle index over that belief at every dwell. Restless multi-armed bandits are
+a reinforcement-learning formalism; the belief update is the standard discounted
+tracker (Garivier & Moulines; Raj & Kalyani). Nothing it acts on is known before
+the mission starts.
+
+Offline learning is here too, and benchmarked honestly: a distilled Transformer
+occupancy predictor (`predictor`), `dqn`, `ppo`, and a `hybrid`, trained for
+198 K – 3 M environment steps each.
+
+**They lose.** On emitters never intercepted, across 30 seeds per tier:
+
+| | easy | medium | hard |
+|---|---|---|---|
+| best online / designed | 0 | **61** | **138** |
+| best offline-trained (`dqn`) | 0 | 77 | 181 |
+| `ppo` | 8 | 78 | 484 |
+| `hybrid` | 26 | 102 | 803 |
+
+Not a training-budget artefact: `dqn_hard`'s return rose from **−570 to +312**
+over 3 M steps — it learned its objective well and still missed more emitters
+than a plain sweep, because the reward it maximises (threat-weighted intercepts
+on emitters already found) is not the metric it is judged on (distinct emitters
+*ever* found). For this problem, **learning online beats learning offline**, and
+that is the result rather than an apology for one.
+
+Clause-by-clause mapping, including all seven figures of merit:
+[`docs/ps_compliance.md`](docs/ps_compliance.md) ·
+[`reports/figures_of_merit.md`](reports/figures_of_merit.md).
+
+---
+
 ## What is here
 
 ```
@@ -62,13 +104,14 @@ smartscan/
                data | credentials | demo | reproduce | info
 dashboard/     app.py — live Streamlit demo
 configs/       base · easy · medium · hard · scan_on_scan
-docs/          architecture · theory · related_work · config_schema · hardware_roadmap
+docs/          ps_compliance · architecture · theory · related_work · config_schema
+               hardware_roadmap
 notebooks/     4 local + 2 Kaggle training notebooks
-scripts/       publish_kaggle.py
+scripts/       figures_of_merit · check_dashboard · publish_kaggle · sweeps
 tests/         env · analysis · reproducibility · acceptance · agents · data
 ```
 
-### Nine schedulers, one interface
+### Sixteen schedulers, one interface
 
 All implement `act(belief, t) -> action` and see the **same** belief — so a
 comparison between them is a comparison of policies, not of information.
@@ -82,6 +125,7 @@ comparison between them is a comparison of policies, not of information.
 | Supervised | `predictor` — GRU / dilated TCN / Transformer, privileged distillation |
 | RL | `dqn`, `ppo` — from scratch, action-masked |
 | Hybrid | `hybrid` — predictor output as an extra RL observation plane |
+| Diagnostic | `predictor_de` (dwell-efficient), `predictor_gc` (guaranteed coverage), `whittle_predictor` — built to isolate *why* the predictor parks; see [`docs/related_work.md`](docs/related_work.md) |
 
 ---
 
