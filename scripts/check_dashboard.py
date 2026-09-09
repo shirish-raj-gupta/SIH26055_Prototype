@@ -166,7 +166,7 @@ def main() -> int:
                     )
                 if "stStatusWidget" not in stepped and "Emitters found" not in stepped:
                     failures.append("metric column vanished after Step")
-            except Exception as exc:                      # noqa: BLE001
+            except Exception as exc:
                 failures.append(f"Step button did not work: {exc}")
 
             for msg in console:

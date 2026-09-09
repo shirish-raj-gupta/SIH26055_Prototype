@@ -117,7 +117,7 @@ def main() -> int:
     staged.mkdir(parents=True, exist_ok=True)
     try:
         ts.download_folder(job.artifact_path, str(staged))
-    except Exception as exc:  # noqa: BLE001 - report, do not mask
+    except Exception as exc:
         print(f"download failed: {type(exc).__name__}: {exc}")
         return 1
 

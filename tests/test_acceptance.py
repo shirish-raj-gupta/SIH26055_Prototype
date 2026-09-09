@@ -32,6 +32,8 @@ from smartscan.runner import run_episode
 @pytest.mark.parametrize("agent", ["sequential", "ppo"])
 def test_cli_run_writes_metrics_json(agent: str, tmp_path: Path):
     """`python -m smartscan.cli run --config configs/medium.yaml --agent X`."""
+    if agent == "ppo":
+        pytest.importorskip("torch")  # torch-free installs still get the sequential case
     out = tmp_path / f"metrics_{agent}.json"
     proc = subprocess.run(
         [

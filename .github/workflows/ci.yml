@@ -1,0 +1,142 @@
+# Tests, on every push.
+#
+# The README advertises a test count and a reproduction pipeline. Until this
+# existed, nothing checked either on a clean checkout -- the suite passed on one
+# laptop with one set of installed packages, which is not the same claim.
+#
+# Three jobs, deliberately:
+#
+#   lint       ruff check only. NOT `ruff format --check`: this repository has
+#              never been ruff-formatted (57 of 81 files would change), so
+#              enforcing it here would fail every run and teach everyone to
+#              ignore a red tick.
+#
+#   core       Install with NO extras and run the suite. README.md offers
+#              `make install-min` as a torch-free path and the tests are written
+#              to skip rather than fail when an optional import is missing
+#              (`pytest.importorskip`). That promise is worth exactly as much as
+#              the job that checks it -- and it catches the common mistake of
+#              importing torch at module scope in a test that claims not to need
+#              it. It is also fast, so a broken core fails in a minute.
+#
+#   full       Everything installed, slow tests excluded. This is the number the
+#              README quotes.
+#
+# Slow tests (`-m slow`) are excluded from push runs and included on the weekly
+# schedule and on manual dispatch, because they are the acceptance tests and
+# they take long enough to make every push painful.
+#
+# Not included: `make benchmark`. Thirty seeds across three tiers is far more
+# than a CI minute allowance should be spent on, and its outputs are committed
+# artifacts that a reviewer can read directly.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Sunday 03:00 UTC -- the full suite including acceptance tests.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push supersedes the first; there is no value in testing a commit
+  # that is already history.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install ruff
+      - run: ruff check .
+
+  core:
+    name: core (no torch, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install core only
+        run: |
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Confirm torch really is absent
+        # Otherwise this job silently becomes a duplicate of `full` the day
+        # torch arrives as somebody's transitive dependency, and the torch-free
+        # path stops being tested without anyone noticing.
+        run: |
+          if python -c "import torch" 2>/dev/null; then
+            echo "::error::torch is installed in the core job; it no longer tests the torch-free path."
+            exit 1
+          fi
+          echo "torch absent, as intended."
+
+      - name: Test
+        run: python -m pytest -q -m "not slow"
+
+  full:
+    name: full (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install with ml, viz, demo and dev extras
+        run: |
+          # CPU wheels only. The default index resolves torch to a CUDA build
+          # that is several gigabytes and cannot be used on a CI runner anyway.
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[ml,viz,demo,dev]"
+
+      - name: Test
+        # The schedule and manual runs take the acceptance tests too.
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python -m pytest -q
+          else
+            python -m pytest -q -m "not slow"
+          fi
+
+      - name: Smoke the CLI
+        # Catches the entry point breaking without any test importing it.
+        run: |
+          python -m smartscan.cli info --config configs/medium.yaml

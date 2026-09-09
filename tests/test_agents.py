@@ -397,6 +397,7 @@ def test_dwell_efficient_value_is_invariant_to_predictor_sharpness(cfg):
     staleness term, so the policy parks harder. Min-max normalisation removes
     the degree of freedom entirely.
     """
+    pytest.importorskip("torch")  # predictor-backed scheduler
     agent = build_agent("predictor_de", cfg, seed=0)
     belief = BeliefState(cfg)
     rng = np.random.default_rng(0)
@@ -415,6 +416,7 @@ def test_dwell_efficient_value_decays_with_harvest(cfg):
     channel is worth less than its occupancy probability suggests. Without this
     term a confident predictor keeps re-selecting what it has already found.
     """
+    pytest.importorskip("torch")  # predictor-backed scheduler
     agent = build_agent("predictor_de", cfg, seed=0)
     belief = BeliefState(cfg)
     p = np.full(belief.n_channels, 0.9)
@@ -464,6 +466,7 @@ def test_guaranteed_coverage_prefers_the_single_starved_channel(cfg):
     diluted aggregation) picks the wrong window here; window_max (what
     GuaranteedCoveragePredictorScheduler actually uses) picks the right one.
     """
+    pytest.importorskip("torch")  # predictor-backed scheduler
     agent = build_agent("predictor_gc", cfg, seed=0)
     legal = np.flatnonzero(agent.legal)
     a_starved, a_crowded = int(legal[0]), int(legal[len(legal) // 2])

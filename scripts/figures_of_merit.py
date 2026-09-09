@@ -114,7 +114,7 @@ def _reward_decomposition(tier: str, agents: tuple[str, ...]) -> dict[str, dict]
                 ("new", "reconfirm", "retune", "interferer", "staleness"), 0.0)
             self.counts = dict.fromkeys(("new", "reconfirm", "retune", "interferer"), 0)
 
-        def step(self, detected_ids, retuned, interferer_dwell, max_staleness):  # noqa: ANN001
+        def step(self, detected_ids, retuned, interferer_dwell, max_staleness):
             c = self.cfg
             for eid in np.unique(detected_ids):
                 eid = int(eid)
@@ -280,7 +280,7 @@ def render(data: dict) -> str:
     row("4", "Avg intercept rate (per s)", "intercept_rate_per_s", "average_intercept_rate", ".1f")
     row("5", "Avg reward / cost function", "reward_total", "average_reward", ".1f")
     row("6", "**% of correct predictions**", "accuracy", "prediction_scores", ".2%", sub="predictor")
-    A(f"| 6 | ↳ _same score for an always-idle model_ | "
+    A("| 6 | ↳ _same score for an always-idle model_ | "
       + " | ".join(_fmt(data['tiers'][t]['predictor'].get('accuracy_of_always_idle'), '.2%') for t in tiers)
       + " | base rate |")
     row("6", "↳ average precision (the honest one)", "average_precision", "average_precision", ".3f", sub="predictor")
