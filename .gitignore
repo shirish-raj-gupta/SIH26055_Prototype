@@ -33,6 +33,15 @@ runs/checkpoints/*
 # Never commit a partial run: this sidecar marks a checkpoint as mid-training.
 runs/checkpoints/*_progress.json
 runs/checkpoints/quarantine/
+
+# A staging drop from a remote training job, holding the candidate checkpoints
+# that `runs/checkpoints` is chosen FROM: several tiers and dates side by side,
+# named by run rather than by tier. Only the winners get installed into
+# `runs/checkpoints`, so this directory is scratch. The weights here are already
+# covered by the `*.pt` and `*.onnx` rules below, but the loose `hist_*.json`
+# histories matched nothing and would otherwise be committed as untracked
+# strays that shadow the real `runs/checkpoints/*_history.json`.
+/out/
 reports/
 /build/
 dist/
