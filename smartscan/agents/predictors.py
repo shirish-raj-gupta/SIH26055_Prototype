@@ -1064,3 +1064,88 @@ class SequencePredictorScheduler(Scheduler):
         action = self.argmax_legal(self.window_value(value), self.retune_penalty)
         self.last_action = action
         return action
+
+
+#: Dwells after which a channel counts as harvested for first-intercept purposes.
+#: Matched to the five-pulse confirmation convention used to size minimum dwell.
+_HARVEST_SCALE = 5.0
+
+
+class DwellEfficientPredictorScheduler(SequencePredictorScheduler):
+    """The occupancy predictor, scored so that a better model schedules better.
+
+    The parent scores a channel as ``P̂·(1 − 0.9·I) + w·s``, with ``P̂`` the
+    sigmoid occupancy probability, ``I`` the interferer score, ``s`` normalised
+    staleness and ``w`` ``agents.coverage_weight``. Two properties of that form
+    make the policy get *worse* as the predictor gets better.
+
+    **It is not invariant to the sharpness of P̂.** ``argmax(P̂ + w·s)`` is not
+    preserved under rescaling of ``P̂``, so a better-trained predictor -- which
+    emits a wider spread across channels -- shrinks the effective weight of the
+    staleness term and parks harder. This is not hypothetical: retraining lifted
+    MEDIUM AUC 0.683 → 0.763 and simultaneously pushed the hard-target hazard
+    0.536 → 0.362 and never-intercepted 112 → 126 of 146, over the same 30
+    seeds, with every policy that does not read predictor weights unchanged to
+    the digit. ``w`` was tuned against the blunter model and silently stopped
+    meaning what it meant.
+
+    The repair is to normalise ``P̂`` to its own cross-channel range each step::
+
+        P̃ = (P̂ − min P̂) / (max P̂ − min P̂ + ε) ∈ [0, 1]
+
+    after which ``w`` is denominated in *one full predictor range* and keeps its
+    meaning as the model improves.
+
+    **It has no novelty discount.** The mission metric is time to *first*
+    intercept per emitter, so a look at a channel already yielding hits is worth
+    far less than its occupancy probability suggests -- but the parent scores it
+    on that probability alone, so a confident predictor keeps re-selecting a
+    channel it has already harvested. That is exactly the dwell-efficiency
+    failure Teissier et al. (2024) name: exploiting a known emitter spends the
+    budget that finding the next one needs. Discounting by observed harvest::
+
+        ν = 1 / (1 + n_hits / 5)
+
+    decays a channel's value as it is exploited without ever zeroing it, so a
+    genuinely re-activating emitter can still be re-acquired.
+
+    Together::
+
+        v(c) = (1 − 0.9·I(c))·P̃(c)·ν(c) + w·s(c)
+
+    Registered separately from ``predictor`` rather than replacing it, so the
+    published numbers for the shipped policy stay reproducible and the two can
+    be compared on the same seeds.
+    """
+
+    def act(self, belief: BeliefState, t: int) -> int:
+        """Tune to the legal window with the highest dwell-efficient value.
+
+        Args:
+            belief: Shared belief state.
+            t: Current slot index.
+
+        Returns:
+            Index of the chosen channel.
+        """
+        if self._fallback is not None:
+            action = self._fallback.act(belief, t)
+            self.last_action = action
+            return action
+
+        p = self.predict(belief)
+        # Scale-invariant exploit term: the predictor supplies an ORDERING, and
+        # normalising to its own range keeps coverage_weight comparable across
+        # checkpoints of different sharpness.
+        lo, hi = float(p.min()), float(p.max())
+        p_rel = (p - lo) / (hi - lo) if hi - lo > 1e-9 else np.zeros_like(p)
+
+        # Novelty: a channel already harvested yields little FIRST-intercept
+        # value, however occupied it remains.
+        novelty = 1.0 / (1.0 + belief.n_hits / _HARVEST_SCALE)
+
+        value = (1.0 - 0.9 * belief.interferer_score()) * p_rel * novelty
+        value = value + self.coverage_weight * (belief.time_since_visit / max(belief.n_slots, 1))
+        action = self.argmax_legal(self.window_value(value), self.retune_penalty)
+        self.last_action = action
+        return action

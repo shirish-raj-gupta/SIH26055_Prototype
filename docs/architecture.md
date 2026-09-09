@@ -483,6 +483,18 @@ on the metric that flatters it — and the log-rank puts its hard-target hazard 
 predictor underneath it did not change this: the hybrid moved +119 % → +123 %
 while its parent moved +159 % → +195 %, so the gap widened rather than closed.
 
+There is a confound in that comparison worth stating rather than hiding. The
+adapter feeds the predictor's **raw** probability vector in as the 13th plane
+(`hybrid.py:62`), and `hybrid_*.pt` was trained when the predictor was the
+blunter model. Retraining sharpened that plane's distribution, so the frozen
+network is now reading a covariate-shifted input it never saw in training --
+which is the likeliest reason the hybrid barely moved while its parent gained
+0.08 AUC. Its +123 % should therefore be read as a floor, not as the hybrid's
+ceiling with a good predictor; closing that needs the RL half retrained against
+the current weights, which §21-G already lists as outstanding. Note that
+`predictor_de` normalises the same vector before scoring, so a hybrid rebuilt
+on that feature would not inherit the problem.
+
 On EASY and HARD it does not schedule at all: under the greedy argmax it tunes to
 one channel for the whole episode. See §21-L for the diagnosis and for why its training return is not
 evidence to the contrary.

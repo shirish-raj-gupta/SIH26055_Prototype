@@ -78,6 +78,7 @@ AGENT_LABELS: dict[str, str] = {
     # though see the log-rank table in the README: on hard-class emitters it is
     # the WORST policy measured, missing 126 of 146.
     "predictor": "Occupancy predictor (transformer)",
+    "predictor_de": "Occupancy predictor (dwell-efficient)",
     "dqn": "Double-DQN (duelling, masked)",
     "ppo": "PPO (from scratch)",
     "hybrid": "Hybrid: predictor + PPO",

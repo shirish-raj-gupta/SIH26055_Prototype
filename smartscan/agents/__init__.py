@@ -59,6 +59,8 @@ register("whittle", _lazy("smartscan.agents.whittle", "WhittleIndexScheduler"))
 register("coprime_sweep", _lazy("smartscan.analysis.scan_on_scan", "CoprimeSweepScheduler"))
 register("phase_locked", _lazy("smartscan.analysis.scan_on_scan", "PhaseLockedScheduler"))
 register("predictor", _lazy("smartscan.agents.predictors", "SequencePredictorScheduler"))
+register("predictor_de", _lazy("smartscan.agents.predictors",
+                               "DwellEfficientPredictorScheduler"))
 register("dqn", _lazy("smartscan.agents.rl_agents", "DQNScheduler"))
 register("ppo", _lazy("smartscan.agents.rl_agents", "PPOScheduler"))
 register("hybrid", _lazy("smartscan.agents.hybrid", "HybridScheduler"))

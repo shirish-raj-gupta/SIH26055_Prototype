@@ -372,3 +372,57 @@ def test_interferer_dwell_is_counted_on_the_hard_tier():
                          scenario=sc, episode=ep)
     assert result.interferer_dwells > 0
     assert 0.0 <= evaluate_episode(result, cfg)["waste_fraction"] <= 1.0
+
+
+# --------------------------------------------------------------------------- #
+# The dwell-efficient predictor's two corrections, pinned as properties.
+# Both are the reason it exists: the shipped `predictor` scores
+# `P̂·(1−0.9·I) + w·s`, which is neither invariant to how sharp `P̂` is nor
+# discounted by what a channel has already yielded.
+# --------------------------------------------------------------------------- #
+def _de_value(agent, belief, p):
+    """Reproduce DwellEfficientPredictorScheduler's channel value for a given P̂."""
+    lo, hi = float(p.min()), float(p.max())
+    p_rel = (p - lo) / (hi - lo) if hi - lo > 1e-9 else np.zeros_like(p)
+    novelty = 1.0 / (1.0 + belief.n_hits / 5.0)
+    return ((1.0 - 0.9 * belief.interferer_score()) * p_rel * novelty
+            + agent.coverage_weight * (belief.time_since_visit / max(belief.n_slots, 1)))
+
+
+def test_dwell_efficient_value_is_invariant_to_predictor_sharpness(cfg):
+    """An affine rescale of P̂ must not change the ranking.
+
+    This is the defect that made a *better* predictor a *worse* scheduler: with
+    the shipped additive form, sharpening P̂ shrinks the effective weight of the
+    staleness term, so the policy parks harder. Min-max normalisation removes
+    the degree of freedom entirely.
+    """
+    agent = build_agent("predictor_de", cfg, seed=0)
+    belief = BeliefState(cfg)
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.2, 0.4, size=belief.n_channels)          # a blunt predictor
+    sharp = 0.05 + 3.0 * (p - p.min())                          # the same ordering, sharper
+
+    base = _de_value(agent, belief, p)
+    resc = _de_value(agent, belief, sharp)
+    np.testing.assert_allclose(base, resc, atol=1e-9)
+
+
+def test_dwell_efficient_value_decays_with_harvest(cfg):
+    """A channel that has already yielded hits must score below an equal twin.
+
+    The mission metric counts *first* intercepts, so re-looking at a harvested
+    channel is worth less than its occupancy probability suggests. Without this
+    term a confident predictor keeps re-selecting what it has already found.
+    """
+    agent = build_agent("predictor_de", cfg, seed=0)
+    belief = BeliefState(cfg)
+    p = np.full(belief.n_channels, 0.9)
+    p[1] = 0.2                                                  # keep a real min/max range
+
+    belief.n_hits[:] = 0
+    belief.n_hits[0] = 20                                       # channel 0 already harvested
+    value = _de_value(agent, belief, p)
+
+    assert value[0] < value[2], "harvested channel should rank below its unharvested twin"
+    assert value[0] > 0.0, "novelty discounts, it must not zero a re-activating emitter"

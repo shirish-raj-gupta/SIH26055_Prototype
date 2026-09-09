@@ -39,13 +39,17 @@ WEIGHTS = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0)
 AGENTS = ("whittle", "phase_locked", "ucb1")
 
 
-def run(tier: str, n_seeds: int, out: Path) -> dict:
+def run(tier: str, n_seeds: int, out: Path,
+        agents: tuple[str, ...] = AGENTS,
+        weights: tuple[float, ...] = WEIGHTS) -> dict:
     """Sweep the weight and score each setting by hazard ratio.
 
     Args:
         tier: Config tier.
         n_seeds: Paired seeds per cell.
         out: Destination JSON.
+        agents: Policies to sweep.
+        weights: ``coverage_weight`` settings to try.
 
     Returns:
         The report dict.
@@ -73,11 +77,12 @@ def run(tier: str, n_seeds: int, out: Path) -> dict:
     bd, bo, _ = collect(base, base.eval.baseline_agent)
 
     t0 = time.perf_counter()
-    report: dict = {"tier": tier, "n_seeds": n_seeds, "weights": list(WEIGHTS),
+    report: dict = {"tier": tier, "n_seeds": n_seeds, "weights": list(weights),
+                    "agents": list(agents),
                     "baseline": base.eval.baseline_agent, "cells": {}}
-    for w in WEIGHTS:
+    for w in weights:
         cfg = base.with_overrides(agents={"coverage_weight": w})
-        for agent in AGENTS:
+        for agent in agents:
             d, o, twir = collect(cfg, agent)
             lr = logrank_test(np.array(d), np.array(o), np.array(bd), np.array(bo))
             hr = lr.observed_a / lr.expected_a if lr.expected_a > 0 else float("nan")
@@ -99,7 +104,7 @@ def render(rep: dict) -> None:
     print()
     print(f"coverage_weight vs hard-target hazard — {rep['tier']}, {rep['n_seeds']} seeds")
     print(f"baseline: {rep['baseline']}   (hazard > 1 = intercepts faster)")
-    for agent in AGENTS:
+    for agent in rep.get("agents", AGENTS):
         print(f"\n  {agent}")
         print(f"    {'weight':<8}{'hazard':>9}{'p':>11}{'never int.':>13}{'TWIR':>10}")
         for w in rep["weights"]:
@@ -117,8 +122,14 @@ def main() -> int:
     ap.add_argument("--tier", default="medium")
     ap.add_argument("--n-seeds", type=int, default=20)
     ap.add_argument("--out", default="reports/coverage_weight_hazard.json")
+    ap.add_argument("--agents", default=",".join(AGENTS),
+                    help="Comma-separated policies to sweep.")
+    ap.add_argument("--weights", default=",".join(str(w) for w in WEIGHTS),
+                    help="Comma-separated coverage_weight settings.")
     args = ap.parse_args()
-    render(run(args.tier, args.n_seeds, Path(args.out)))
+    agents = tuple(a.strip() for a in args.agents.split(",") if a.strip())
+    weights = tuple(float(w) for w in args.weights.split(",") if w.strip())
+    render(run(args.tier, args.n_seeds, Path(args.out), agents, weights))
     print(f"\nwrote {args.out}")
     return 0
 
