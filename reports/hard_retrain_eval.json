@@ -1,0 +1,106 @@
+{
+ "tier": "hard",
+ "n_seeds": 3,
+ "poisson_floor": {
+  "AgileBeamRadar": 0.44374731008107987,
+  "CircularScanRadar": 0.0040234119200233415,
+  "CommsBurst": 2.5299692255799318e-23,
+  "FrequencyAgile": 1.073591209580935e-100,
+  "PulsedRadar": 8.59836997230016e-136,
+  "SectorScanRadar": 3.094158060394598e-09
+ },
+ "totals": {
+  "AgileBeamRadar": 9,
+  "CircularScanRadar": 24,
+  "CommsBurst": 9,
+  "FrequencyAgile": 12,
+  "PulsedRadar": 12,
+  "SectorScanRadar": 9
+ },
+ "misses": {
+  "sequential": {
+   "AgileBeamRadar": 6,
+   "CircularScanRadar": 4,
+   "CommsBurst": 1,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 2
+  },
+  "coprime_sweep": {
+   "AgileBeamRadar": 6,
+   "CircularScanRadar": 5,
+   "CommsBurst": 1,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 0
+  },
+  "whittle": {
+   "AgileBeamRadar": 8,
+   "CircularScanRadar": 9,
+   "CommsBurst": 1,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 2
+  },
+  "phase_locked": {
+   "AgileBeamRadar": 7,
+   "CircularScanRadar": 10,
+   "CommsBurst": 0,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 2
+  },
+  "predictor": {
+   "AgileBeamRadar": 8,
+   "CircularScanRadar": 14,
+   "CommsBurst": 1,
+   "FrequencyAgile": 1,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 6
+  },
+  "predictor_gc": {
+   "AgileBeamRadar": 8,
+   "CircularScanRadar": 10,
+   "CommsBurst": 1,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 1
+  },
+  "dqn": {
+   "AgileBeamRadar": 4,
+   "CircularScanRadar": 9,
+   "CommsBurst": 1,
+   "FrequencyAgile": 0,
+   "PulsedRadar": 0,
+   "SectorScanRadar": 0
+  },
+  "ppo": {
+   "AgileBeamRadar": 8,
+   "CircularScanRadar": 15,
+   "CommsBurst": 6,
+   "FrequencyAgile": 1,
+   "PulsedRadar": 4,
+   "SectorScanRadar": 6
+  },
+  "hybrid": {
+   "AgileBeamRadar": 9,
+   "CircularScanRadar": 21,
+   "CommsBurst": 8,
+   "FrequencyAgile": 7,
+   "PulsedRadar": 12,
+   "SectorScanRadar": 7
+  }
+ },
+ "total_misses": {
+  "sequential": 13,
+  "coprime_sweep": 12,
+  "whittle": 20,
+  "phase_locked": 19,
+  "predictor": 30,
+  "predictor_gc": 20,
+  "dqn": 14,
+  "ppo": 40,
+  "hybrid": 64
+ },
+ "failed": {}
+}
