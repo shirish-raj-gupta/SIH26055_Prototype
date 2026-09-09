@@ -80,6 +80,7 @@ AGENT_LABELS: dict[str, str] = {
     "predictor": "Occupancy predictor (transformer)",
     "predictor_de": "Occupancy predictor (dwell-efficient)",
     "predictor_gc": "Occupancy predictor (guaranteed coverage)",
+    "whittle_predictor": "Whittle + predictor (slot-split)",
     "dqn": "Double-DQN (duelling, masked)",
     "ppo": "PPO (from scratch)",
     "hybrid": "Hybrid: predictor + PPO",
@@ -293,9 +294,20 @@ def _waterfall(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray, t
         fig.add_hrect(y0=lo - 0.5, y1=lo + k - 0.5, fillcolor=C_WINDOW,
                       opacity=0.22, line_width=0)
 
+    n_popup = 0
     for truth in episode.truth:
         if truth.t_first_active > 0:
+            n_popup += 1
             fig.add_vline(x=truth.t_first_active * dt, line={"color": C_POPUP, "dash": "dot", "width": 1.5})
+    if n_popup:
+        # A vline draws no legend entry, so the yellow dashes are unexplained
+        # unless something claims them. This trace plots nothing and exists only
+        # to put a name against that colour.
+        fig.add_trace(go.Scattergl(
+            x=[None], y=[None], mode="lines",
+            line={"color": C_POPUP, "dash": "dot", "width": 1.5},
+            name="pop-up threat appears",
+        ))
 
     fig.update_layout(
         title=title, height=330, margin={"l": 40, "r": 10, "t": 40, "b": 30},
@@ -317,6 +329,14 @@ def _metrics(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray) -> 
     n_declared = int(track.hit_mask.sum())
     n_true = int(track.true_hit_mask.sum())
     n_avail = int((interceptable & track.visit_mask).sum())
+    # Everything catchable that has gone out SO FAR, whether or not we were
+    # pointed at it. This is the denominator the schedule is judged on: `n_avail`
+    # only counts traffic that happened while we were already looking, so
+    # dividing by it measures the receiver and not the policy. Elapsed slots
+    # only, or a mid-episode reading would be diluted by a future it has not
+    # reached yet.
+    t_now = max(track.t, 1)
+    n_on_air = int(interceptable[:, :t_now].sum())
     empty_looked = int((track.visit_mask & (episode.occupancy == 0)).sum())
     false_alarms = int((track.hit_mask & (episode.occupancy == 0)).sum())
 
@@ -328,7 +348,7 @@ def _metrics(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray) -> 
         "found": found,
         "total": total,
         "ttfi_s": ttfi,
-        "twir": n_true / max(n_avail, 1),
+        "twir": n_true / max(n_on_air, 1),
         "pd": n_true / max(n_avail, 1),
         "pfa": false_alarms / max(empty_looked, 1),
         "reward": track.total_reward,
@@ -338,16 +358,86 @@ def _metrics(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray) -> 
     }
 
 
+#: Policies the 30-seed grid actually supports as the result, and the ones that
+#: exist to explain a failure. A judge picking from a flat list of fourteen has
+#: no way to know that `predictor` is the worst policy in the log-rank table.
+HEADLINE_AGENTS = frozenset({"whittle", "phase_locked"})
+DIAGNOSTIC_AGENTS = frozenset({"predictor_de", "predictor_gc", "whittle_predictor"})
+
+
+def _agent_index(key: str, fallback: int = 0) -> int:
+    """Position of ``key`` in the label order, for a selectbox default.
+
+    Hard-coded positions break silently: inserting one label above the default
+    changes which policy the demo opens on, and nothing in the UI says so.
+
+    Args:
+        key: Agent key to locate.
+        fallback: Index to use if the key is absent.
+
+    Returns:
+        Index of ``key`` in ``AGENT_LABELS``, or ``fallback``.
+    """
+    keys = list(AGENT_LABELS)
+    return keys.index(key) if key in keys else fallback
+
+
+def _agent_option(key: str) -> str:
+    """Label a dropdown entry, marking the headline and diagnostic policies."""
+    label = AGENT_LABELS.get(key, key)
+    if key in HEADLINE_AGENTS:
+        return f"★ {label}"
+    if key in DIAGNOSTIC_AGENTS:
+        return f"{label}  · diagnostic"
+    return label
+
+
 def _render_gauges(m: dict[str, float]) -> None:
     """Draw the right-hand metric column."""
-    st.metric("Emitters found", f"{int(m['found'])} / {int(m['total'])}")
-    st.metric("Time to first intercept", "—" if np.isnan(m["ttfi_s"]) else f"{m['ttfi_s']:.2f} s")
-    st.metric("Interception ratio", f"{m['twir']:.3f}")
-    st.metric("Threat-weighted reward", f"{m['reward']:.1f}")
-    st.metric("Band coverage", f"{100 * m['coverage']:.0f} %")
+    st.metric(
+        "Emitters found", f"{int(m['found'])} / {int(m['total'])}",
+        help="Distinct emitters intercepted at least once, out of those that "
+             "were catchable at all. The mission metric: a scheduler is judged "
+             "on emitters it *ever* finds, not on how much signal it collects "
+             "from the ones it already has.",
+    )
+    st.metric(
+        "Time to first intercept",
+        "—" if np.isnan(m["ttfi_s"]) else f"{m['ttfi_s']:.2f} s",
+        help="Time to the first confirmed intercept of any emitter. Lower is "
+             "better.",
+    )
+    st.metric(
+        "Interception ratio", f"{m['twir']:.3f}",
+        help="Of everything catchable that has gone out so far, the fraction "
+             "actually caught. Bounded by where the receiver chose to look, so "
+             "this is a verdict on the schedule.",
+    )
+    st.metric(
+        "Threat-weighted reward", f"{m['reward']:.1f}",
+        help="The objective the policies actually optimise: intercepts weighted "
+             "by threat, less staleness and retune costs. Comparable only "
+             "between panels on this screen, since it has no natural scale.",
+    )
+    st.metric(
+        "Band coverage", f"{100 * m['coverage']:.0f} %",
+        help="Fraction of channels visited at least once. A policy that parks "
+             "on its best guess scores high on interception and low here — "
+             "which is exactly how a confident predictor loses emitters it "
+             "never went to look for.",
+    )
     c1, c2 = st.columns(2)
-    c1.metric("Pd (looked)", f"{m['pd']:.3f}")
-    c2.metric("Pfa", f"{m['pfa']:.4f}")
+    c1.metric(
+        "Pd (looked)", f"{m['pd']:.3f}",
+        help="Detections among transmissions that happened while the receiver "
+             "was already tuned to that channel. Measures the receiver, not the "
+             "schedule — a parked policy can score well here while missing most "
+             "of the band.",
+    )
+    c2.metric(
+        "Pfa", f"{m['pfa']:.4f}",
+        help="False alarms per look at an empty channel.",
+    )
 
 
 def _render_reasoning(track: Track, cfg: Config) -> None:
@@ -407,17 +497,23 @@ def main() -> None:
         st.divider()
         mode = st.radio("Mode", ["A/B comparison", "Single scheduler"], index=0)
         if mode == "A/B comparison":
-            left = st.selectbox("A", list(AGENT_LABELS), index=0,
-                                format_func=lambda k: AGENT_LABELS[k])
-            right = st.selectbox("B", list(AGENT_LABELS), index=5,
-                                 format_func=lambda k: AGENT_LABELS[k])
+            left = st.selectbox("A", list(AGENT_LABELS),
+                                index=_agent_index("sequential"),
+                                format_func=_agent_option,
+                                help="The tuned sweep every number is measured against.")
+            right = st.selectbox("B", list(AGENT_LABELS),
+                                 index=_agent_index("whittle"),
+                                 format_func=_agent_option,
+                                 help="★ marks the two policies the 30-seed grid "
+                                      "supports as the result.")
             # Dedupe: comparing a scheduler against itself renders two
             # identical panels, and Streamlit rejects the second because both
             # would claim the same element key.
             chosen = [left] if left == right else [left, right]
         else:
-            chosen = [st.selectbox("Scheduler", list(AGENT_LABELS), index=5,
-                                   format_func=lambda k: AGENT_LABELS[k])]
+            chosen = [st.selectbox("Scheduler", list(AGENT_LABELS),
+                                   index=_agent_index("whittle"),
+                                   format_func=_agent_option)]
 
         st.divider()
         speed = st.slider("Slots per frame", 10, 1000, 200, step=10)
@@ -464,6 +560,17 @@ def main() -> None:
 
     # ---------------- header ---------------- #
     st.markdown("### The receiver sees 1 slice of the band at a time. Everything else is unknown.")
+    # The waterfall is the whole argument, so the colours have to be readable
+    # without hunting for the plot legend underneath each panel.
+    st.markdown(
+        f"""<div style="margin:-0.4rem 0 0.6rem 0; font-size:0.86rem; opacity:0.85;">
+        <span style="color:{C_MISS};">&#9632;</span> transmitted, missed &nbsp;&nbsp;
+        <span style="color:{C_HIT};">&#9632;</span> intercepted &nbsp;&nbsp;
+        <span style="color:{C_WINDOW};">&#9632;</span> where the receiver is looking &nbsp;&nbsp;
+        <span style="color:{C_POPUP};">&#9646;</span> pop-up threat appears
+        </div>""",
+        unsafe_allow_html=True,
+    )
     lead = tracks[chosen[0]]
     progress = lead.t / max(episode.n_slots, 1)
     st.progress(min(progress, 1.0), text=f"t = {lead.t * cfg.time.dt_s:.2f} s  /  {cfg.time.episode_s:.0f} s")
