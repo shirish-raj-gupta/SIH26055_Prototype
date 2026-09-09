@@ -294,26 +294,18 @@ def _waterfall(track: Track, cfg: Config, episode: Any, pd_tensor: np.ndarray, t
         fig.add_hrect(y0=lo - 0.5, y1=lo + k - 0.5, fillcolor=C_WINDOW,
                       opacity=0.22, line_width=0)
 
-    n_popup = 0
     for truth in episode.truth:
         if truth.t_first_active > 0:
-            n_popup += 1
             fig.add_vline(x=truth.t_first_active * dt, line={"color": C_POPUP, "dash": "dot", "width": 1.5})
-    if n_popup:
-        # A vline draws no legend entry, so the yellow dashes are unexplained
-        # unless something claims them. This trace plots nothing and exists only
-        # to put a name against that colour.
-        fig.add_trace(go.Scattergl(
-            x=[None], y=[None], mode="lines",
-            line={"color": C_POPUP, "dash": "dot", "width": 1.5},
-            name="pop-up threat appears",
-        ))
 
     fig.update_layout(
         title=title, height=330, margin={"l": 40, "r": 10, "t": 40, "b": 30},
         xaxis={"title": "time (s)", "range": [0, cfg.time.episode_s]},
         yaxis={"title": "channel", "range": [0, cfg.n_channels]},
-        legend={"orientation": "h", "y": -0.22}, template="plotly_dark",
+        # The colour key under the header names all four colours once, for both
+        # panels. A per-chart legend repeats it in different words ("INTERCEPT"
+        # vs "intercepted") and costs a fifth of the plot height.
+        showlegend=False, template="plotly_dark",
         uirevision="keep",
     )
     return fig
@@ -558,6 +550,14 @@ def main() -> None:
     if auto and not st.session_state.get("running"):
         st.session_state["running"] = True
 
+    # ---------------- advance ---------------- #
+    n_steps = speed if (st.session_state.get("running") or step_once) else 0
+    if inject and not st.session_state["injected"]:
+        st.session_state["injected"] = True
+        st.toast("Pop-up threat injected — watch which scheduler reacts.", icon="⚡")
+    for track in tracks.values():
+        _advance(track, cfg, n_steps, interferers)
+
     # ---------------- header ---------------- #
     st.markdown("### The receiver sees 1 slice of the band at a time. Everything else is unknown.")
     # The waterfall is the whole argument, so the colours have to be readable
@@ -575,14 +575,6 @@ def main() -> None:
     progress = lead.t / max(episode.n_slots, 1)
     st.progress(min(progress, 1.0), text=f"t = {lead.t * cfg.time.dt_s:.2f} s  /  {cfg.time.episode_s:.0f} s")
 
-    # ---------------- advance ---------------- #
-    n_steps = speed if (st.session_state.get("running") or step_once) else 0
-    if inject and not st.session_state["injected"]:
-        st.session_state["injected"] = True
-        st.toast("Pop-up threat injected — watch which scheduler reacts.", icon="⚡")
-    for track in tracks.values():
-        _advance(track, cfg, n_steps, interferers)
-
     # ---------------- panels ---------------- #
     for i, key in enumerate(chosen):
         track = tracks[key]
@@ -593,6 +585,10 @@ def main() -> None:
                 width="stretch", key=f"wf_{i}_{key}",
             )
         with col_metrics:
+            if len(chosen) == 2:
+                # Two identical stacks of numbers, far from their charts: without
+                # this the right-hand column is unattributable at a glance.
+                st.caption(f"**{'AB'[i]}** · {AGENT_LABELS.get(key, key)}")
             _render_gauges(_metrics(track, cfg, episode, pd_tensor))
 
     if len(chosen) == 2:
