@@ -1023,6 +1023,10 @@ class SequencePredictorScheduler(Scheduler):
         super().reset()
         self.buffer = np.zeros((N_PLANES, self.n_channels, self.w), dtype=np.float32)
         self._t = 0
+        # Drop any cached prediction: carrying one across episodes would let a
+        # policy start the next scenario acting on the last one's occupancy.
+        self._pred_cache = None
+        self._pred_age = 10**9
         if self._fallback is not None:
             self._fallback.reset()
 
@@ -1045,10 +1049,20 @@ class SequencePredictorScheduler(Scheduler):
         Returns:
             Float64 probabilities of shape ``(B,)``.
         """
+        every = max(int(getattr(self.cfg.agents, "predict_every", 1)), 1)
+        if every > 1:
+            cached = getattr(self, "_pred_cache", None)
+            age = self._pred_age = getattr(self, "_pred_age", every) + 1
+            if cached is not None and age < every:
+                return cached
+
         self.buffer[3, :, -1] = np.log1p(belief.time_since_visit) / np.log(max(belief.n_slots, 2))
         with self.torch.no_grad():
             x = self.torch.as_tensor(self.buffer[None], dtype=self.torch.float32)
-            return self.torch.sigmoid(self.model(x)).numpy().ravel().astype(np.float64)
+            out = self.torch.sigmoid(self.model(x)).numpy().ravel().astype(np.float64)
+        if every > 1:
+            self._pred_cache, self._pred_age = out, 0
+        return out
 
     def act(self, belief: BeliefState, t: int) -> int:
         """Tune to the legal window with the highest predicted value."""

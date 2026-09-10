@@ -558,6 +558,16 @@ class AgentsConfig(_Base):
     #: 0 reduces the policy exactly to ``coprime_sweep``.
     refine_radius: int = 2
 
+    #: Slots between predictor forward passes. 1 reruns the network on every
+    #: dwell, which is what the shipped policies do and what every published
+    #: number was measured at, so it stays the default. Above 1 the last
+    #: prediction is reused in between: an occupancy estimate does not change
+    #: meaningfully in a millisecond, and a fielded receiver would not run a
+    #: network at 1 kHz either. It matters most for `predictor_sweep`, which
+    #: uses the prediction only to choose among a handful of adjacent windows
+    #: and so tolerates a slightly stale one.
+    predict_every: int = 1
+
     sequential_sweep: SequentialSweepConfig = SequentialSweepConfig()
     random_scan: RandomScanConfig = RandomScanConfig()
     priority_round_robin: PriorityRRConfig = PriorityRRConfig()
