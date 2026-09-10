@@ -1,0 +1,348 @@
+{
+ "tiers": {
+  "easy": {
+   "agents": {
+    "sequential": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.017563847288845868,
+     "ttfi_s": 0.07450000000000001,
+     "coverage": 1.0,
+     "reward": 78.04898713041595
+    },
+    "random": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.010055742198315377,
+     "ttfi_s": 0.081,
+     "coverage": 1.0,
+     "reward": 64.35006943041596
+    },
+    "priority_rr": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.02478903968481083,
+     "ttfi_s": 0.035,
+     "coverage": 1.0,
+     "reward": 64.07565458033274
+    },
+    "epsilon_greedy": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.0654835279284996,
+     "ttfi_s": 0.062,
+     "coverage": 1.0,
+     "reward": 66.57336944415736
+    },
+    "ucb1": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.02165744304940807,
+     "ttfi_s": 0.047,
+     "coverage": 1.0,
+     "reward": 64.78014957941042
+    },
+    "thompson": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.04933126627092904,
+     "ttfi_s": 0.0605,
+     "coverage": 1.0,
+     "reward": 65.7850706820536
+    },
+    "whittle": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.019924380769307595,
+     "ttfi_s": 0.047,
+     "coverage": 1.0,
+     "reward": 65.1324475646908
+    },
+    "coprime_sweep": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.009987045916699244,
+     "ttfi_s": 0.0575,
+     "coverage": 1.0,
+     "reward": 64.93536943041595
+    },
+    "phase_locked": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.019924380769307595,
+     "ttfi_s": 0.047,
+     "coverage": 1.0,
+     "reward": 65.1324475646908
+    },
+    "predictor": {
+     "n_seeds": 30,
+     "never_intercepted": 5.0,
+     "twir": 0.14187329054625314,
+     "ttfi_s": 0.047,
+     "coverage": 1.0,
+     "reward": 80.85523792451049
+    },
+    "dqn": {
+     "n_seeds": 30,
+     "never_intercepted": 0.0,
+     "twir": 0.010099696344748693,
+     "ttfi_s": 0.083,
+     "coverage": 1.0,
+     "reward": 63.923466422332496
+    },
+    "ppo": {
+     "n_seeds": 30,
+     "never_intercepted": 8.0,
+     "twir": 0.19159647322429257,
+     "ttfi_s": 0.047,
+     "coverage": 1.0,
+     "reward": 65.80006541487668
+    },
+    "hybrid": {
+     "n_seeds": 30,
+     "never_intercepted": 26.0,
+     "twir": 0.0023844655715801696,
+     "ttfi_s": 5.956,
+     "coverage": 0.8,
+     "reward": 50.15960775051079
+    }
+   },
+   "pareto": [
+    "epsilon_greedy",
+    "predictor",
+    "ppo"
+   ],
+   "n_seeds": 30,
+   "best_coverage": "epsilon_greedy",
+   "best_twir": "ppo"
+  },
+  "medium": {
+   "agents": {
+    "sequential": {
+     "n_seeds": 30,
+     "never_intercepted": 73.0,
+     "twir": 0.012986607543637573,
+     "ttfi_s": 0.1145,
+     "coverage": 0.8571428571428571,
+     "reward": 213.56074015316068
+    },
+    "random": {
+     "n_seeds": 30,
+     "never_intercepted": 76.0,
+     "twir": 0.0074016164335587685,
+     "ttfi_s": 0.1505,
+     "coverage": 0.8285714285714285,
+     "reward": 192.88102099475424
+    },
+    "priority_rr": {
+     "n_seeds": 30,
+     "never_intercepted": 62.0,
+     "twir": 0.012131791242203899,
+     "ttfi_s": 0.0895,
+     "coverage": 0.8666666666666667,
+     "reward": 198.1722721476131
+    },
+    "epsilon_greedy": {
+     "n_seeds": 30,
+     "never_intercepted": 131.0,
+     "twir": 0.052592812286243774,
+     "ttfi_s": 0.126,
+     "coverage": 0.7238095238095238,
+     "reward": 176.7453140939253
+    },
+    "ucb1": {
+     "n_seeds": 30,
+     "never_intercepted": 70.0,
+     "twir": 0.011874416836164439,
+     "ttfi_s": 0.077,
+     "coverage": 0.8571428571428571,
+     "reward": 196.98120224902735
+    },
+    "thompson": {
+     "n_seeds": 30,
+     "never_intercepted": 109.0,
+     "twir": 0.025530241772964306,
+     "ttfi_s": 0.0935,
+     "coverage": 0.7333333333333333,
+     "reward": 180.12489859794704
+    },
+    "whittle": {
+     "n_seeds": 30,
+     "never_intercepted": 70.0,
+     "twir": 0.021730064753784792,
+     "ttfi_s": 0.083,
+     "coverage": 0.8571428571428571,
+     "reward": 209.12995937202948
+    },
+    "coprime_sweep": {
+     "n_seeds": 30,
+     "never_intercepted": 61.0,
+     "twir": 0.007958819262013635,
+     "ttfi_s": 0.087,
+     "coverage": 0.8666666666666667,
+     "reward": 201.0767563701944
+    },
+    "phase_locked": {
+     "n_seeds": 30,
+     "never_intercepted": 72.0,
+     "twir": 0.022927718668275567,
+     "ttfi_s": 0.083,
+     "coverage": 0.8571428571428571,
+     "reward": 209.65321349829796
+    },
+    "predictor": {
+     "n_seeds": 30,
+     "never_intercepted": 147.0,
+     "twir": 0.03835278501347941,
+     "ttfi_s": 0.667,
+     "coverage": 0.6666666666666666,
+     "reward": 146.9909872750749
+    },
+    "dqn": {
+     "n_seeds": 30,
+     "never_intercepted": 77.0,
+     "twir": 0.02249598333037445,
+     "ttfi_s": 0.193,
+     "coverage": 0.8,
+     "reward": 208.54530783628456
+    },
+    "ppo": {
+     "n_seeds": 30,
+     "never_intercepted": 78.0,
+     "twir": 0.007628832296075857,
+     "ttfi_s": 0.227,
+     "coverage": 0.8285714285714285,
+     "reward": 191.92825801283843
+    },
+    "hybrid": {
+     "n_seeds": 30,
+     "never_intercepted": 102.0,
+     "twir": 0.028984191821014797,
+     "ttfi_s": 0.14100000000000001,
+     "coverage": 0.7928571428571429,
+     "reward": 208.98514419193344
+    }
+   },
+   "pareto": [
+    "coprime_sweep",
+    "priority_rr",
+    "whittle",
+    "phase_locked",
+    "hybrid",
+    "epsilon_greedy"
+   ],
+   "n_seeds": 30,
+   "best_coverage": "coprime_sweep",
+   "best_twir": "epsilon_greedy"
+  },
+  "hard": {
+   "agents": {
+    "sequential": {
+     "n_seeds": 30,
+     "never_intercepted": 138.0,
+     "twir": 0.012822017048043505,
+     "ttfi_s": 0.117,
+     "coverage": 0.8541114058355437,
+     "reward": -1494.2170958394354
+    },
+    "random": {
+     "n_seeds": 30,
+     "never_intercepted": 175.0,
+     "twir": 0.007287628928502045,
+     "ttfi_s": 0.14250000000000002,
+     "coverage": 0.7931034482758621,
+     "reward": -695.0736869471762
+    },
+    "priority_rr": {
+     "n_seeds": 30,
+     "never_intercepted": 169.0,
+     "twir": 0.00745529022204758,
+     "ttfi_s": 0.184,
+     "coverage": 0.8107142857142857,
+     "reward": -891.6589086706326
+    },
+    "ucb1": {
+     "n_seeds": 30,
+     "never_intercepted": 162.0,
+     "twir": 0.008511458910568575,
+     "ttfi_s": 0.0965,
+     "coverage": 0.8107142857142857,
+     "reward": -1816.681418991825
+    },
+    "thompson": {
+     "n_seeds": 30,
+     "never_intercepted": 303.0,
+     "twir": 0.019084903023021314,
+     "ttfi_s": 0.4375,
+     "coverage": 0.6666666666666666,
+     "reward": -5032.949048843748
+    },
+    "whittle": {
+     "n_seeds": 30,
+     "never_intercepted": 187.0,
+     "twir": 0.02501965313344383,
+     "ttfi_s": 0.1135,
+     "coverage": 0.7931034482758621,
+     "reward": -350.99695720140767
+    },
+    "coprime_sweep": {
+     "n_seeds": 30,
+     "never_intercepted": 139.0,
+     "twir": 0.007439977151842492,
+     "ttfi_s": 0.0895,
+     "coverage": 0.8620689655172413,
+     "reward": -678.3183066832738
+    },
+    "phase_locked": {
+     "n_seeds": 30,
+     "never_intercepted": 177.0,
+     "twir": 0.026463163609377637,
+     "ttfi_s": 0.1135,
+     "coverage": 0.8,
+     "reward": -333.06873165159413
+    },
+    "predictor": {
+     "n_seeds": 30,
+     "never_intercepted": 375.0,
+     "twir": 0.044360124289249146,
+     "ttfi_s": 1.7525,
+     "coverage": 0.5764367816091953,
+     "reward": -512.3365071896192
+    },
+    "dqn": {
+     "n_seeds": 30,
+     "never_intercepted": 181.0,
+     "twir": 0.0282388501083363,
+     "ttfi_s": 0.1685,
+     "coverage": 0.7931034482758621,
+     "reward": 301.3345516697419
+    },
+    "ppo": {
+     "n_seeds": 30,
+     "never_intercepted": 484.0,
+     "twir": 0.015548999659499144,
+     "ttfi_s": 4.753,
+     "coverage": 0.44080459770114944,
+     "reward": 115.5407459069188
+    },
+    "hybrid": {
+     "n_seeds": 30,
+     "never_intercepted": 803.0,
+     "twir": 0.024102671073842744,
+     "ttfi_s": NaN,
+     "coverage": 0.067816091954023,
+     "reward": 13.925510512345433
+    }
+   },
+   "pareto": [
+    "sequential",
+    "phase_locked",
+    "dqn",
+    "predictor"
+   ],
+   "n_seeds": 30,
+   "best_coverage": "sequential",
+   "best_twir": "predictor"
+  }
+ }
+}

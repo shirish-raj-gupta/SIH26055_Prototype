@@ -72,6 +72,8 @@ reports/*
 !reports/hard_tier_ceiling.json
 !reports/hard_tier_ceiling.md
 !reports/hard_retrain_eval.json
+!reports/tier_policy.json
+!reports/tier_policy.md
 # Figures F1-F7, referenced from the README and the architecture note.
 !reports/*.png
 /build/
