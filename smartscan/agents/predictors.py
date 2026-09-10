@@ -1353,3 +1353,108 @@ class WhittlePredictorScheduler(SequencePredictorScheduler):
         self.last_action = action
         return action
 
+
+
+class SweepRefinedPredictorScheduler(SequencePredictorScheduler):
+    """A golden-ratio sweep the predictor is only allowed to nudge.
+
+    Every predictor policy measured here loses to a plain sweep on HARD, and
+    they all lose the same way. ``predictor`` blends occupancy and staleness
+    into one score, so a sharper model widens ``P̂`` until staleness cannot
+    compete and coverage collapses: 93 emitters never intercepted over 8 seeds
+    against ``coprime_sweep``'s 33, with 47 of 64 circular scanners missed
+    against the sweep's 14. ``predictor_gc`` reserves a slot budget instead,
+    which stops the collapse but still loses (57), and raising the reserved
+    fraction never closes the gap.
+
+    The reason the budget split is not enough is that its coverage slots go to
+    the *most overdue* window. Greedy staleness produces an irregular revisit
+    pattern, and irregular is precisely what a periodic emitter survives. The
+    sweeps win on HARD because their pattern is **uniform**: a golden-ratio
+    Weyl sequence has the smallest possible largest gap by the three-distance
+    theorem, which is the same argument :class:`CoprimeSweepScheduler` and the
+    scan-on-scan analysis rest on. Greedy staleness throws that guarantee away
+    and gets nothing for it.
+
+    So this policy does not spend the sweep's slots at all. The sweep runs
+    untouched and proposes an action; the predictor may substitute any legal
+    action within ``agents.refine_radius`` of it, choosing by predicted
+    threat-weighted occupancy. The Weyl sequence advances exactly as it would
+    alone, so its three-distance bound survives -- the largest revisit gap
+    grows by at most ``refine_radius`` actions rather than becoming unbounded.
+    The predictor is spending slack that already existed instead of coverage
+    that did not.
+
+    ``refine_radius = 0`` reduces this exactly to ``coprime_sweep``, which
+    makes the comparison honest: any difference is the predictor's doing, and
+    the floor is the strongest baseline rather than zero.
+
+    A refinement is chosen once per sweep dwell, not per slot, so following the
+    predictor cannot manufacture retunes the sweep would not have paid for.
+    """
+
+    key = "predictor_sweep"
+    needs_periods = True
+
+    def __init__(
+        self,
+        config: Config,
+        seed: int = 0,
+        name: str | None = None,
+        checkpoint: str | Path | None = None,
+        model: Any = None,
+    ) -> None:
+        super().__init__(config, seed, name, checkpoint, model)
+        from smartscan.analysis.scan_on_scan import CoprimeSweepScheduler
+
+        self._sweep = CoprimeSweepScheduler(config, seed, name)
+        self._radius = max(int(config.agents.refine_radius), 0)
+        self._last_base: int | None = None
+        self._last_choice: int | None = None
+
+    def reset(self) -> None:
+        """Reset the predictor state and restart the sweep's Weyl sequence."""
+        super().reset()
+        # Guard: the base __init__ calls reset() before _sweep is assigned.
+        sweep = getattr(self, "_sweep", None)
+        if sweep is not None:
+            sweep.reset()
+        self._last_base = None
+        self._last_choice = None
+
+    def observe(self, obs: Any) -> None:
+        """Forward observations to the delegate as well as the predictor."""
+        super().observe(obs)
+        sweep = getattr(self, "_sweep", None)
+        if sweep is not None:
+            sweep.observe(obs)
+
+    def act(self, belief: BeliefState, t: int) -> int:
+        """Take the sweep's action, or the best predicted one beside it.
+
+        Args:
+            belief: Shared belief state.
+            t: Current slot index.
+
+        Returns:
+            Index of the chosen action.
+        """
+        base = int(self._sweep.act(belief, t))
+        if self._fallback is not None or self._radius == 0:
+            return base
+
+        # One decision per sweep dwell. Re-choosing every slot would let the
+        # refinement oscillate inside a single dwell and pay retune costs the
+        # sweep never incurs, which would flatter the baseline unfairly.
+        if base == self._last_base and self._last_choice is not None:
+            return self._last_choice
+
+        p = self.predict(belief)
+        value = self.window_value(p * (1.0 - 0.9 * belief.interferer_score()))
+        lo, hi = max(base - self._radius, 0), min(base + self._radius, value.size - 1)
+        window = np.arange(lo, hi + 1)
+        window = window[self.legal[window]]
+        choice = int(window[int(np.argmax(value[window]))]) if window.size else base
+
+        self._last_base, self._last_choice = base, choice
+        return choice

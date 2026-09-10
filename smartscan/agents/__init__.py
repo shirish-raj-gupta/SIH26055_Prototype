@@ -65,6 +65,8 @@ register("predictor_gc", _lazy("smartscan.agents.predictors",
                                "GuaranteedCoveragePredictorScheduler"))
 register("whittle_predictor", _lazy("smartscan.agents.predictors",
                                    "WhittlePredictorScheduler"))
+register("predictor_sweep", _lazy("smartscan.agents.predictors",
+                                  "SweepRefinedPredictorScheduler"))
 register("dqn", _lazy("smartscan.agents.rl_agents", "DQNScheduler"))
 register("ppo", _lazy("smartscan.agents.rl_agents", "PPOScheduler"))
 register("hybrid", _lazy("smartscan.agents.hybrid", "HybridScheduler"))

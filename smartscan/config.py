@@ -521,7 +521,11 @@ class CoprimeSweepConfig(_Base):
 class PhaseLockedConfig(_Base):
     guard_sigma: float = Field(default=3.0, ge=0)
     min_confidence: float = Field(default=0.7, ge=0, le=1)
-    fallback: Literal["whittle", "sequential", "thompson"] = "whittle"
+    #: What to do BETWEEN predicted beam arrivals. This is most of the
+    #: episode, so it dominates the score: phase_locked lands at 47 on HARD
+    #: against its whittle fallback's 50, while coprime_sweep alone scores
+    #: 33. The parking is worth a few misses; the fallback is worth twenty.
+    fallback: Literal["whittle", "sequential", "thompson", "coprime_sweep"] = "whittle"
 
 
 class AgentsConfig(_Base):
@@ -544,6 +548,15 @@ class AgentsConfig(_Base):
     #: cannot be dominated, so both properties hold by construction and the knob
     #: means the same thing whatever the predictor does.
     coverage_fraction: float = 0.5
+
+    #: Half-width, in actions, of the neighbourhood ``predictor_sweep`` may
+    #: pick within. The sweep decides *when* and roughly *where*; the predictor
+    #: chooses the best window this far either side of the sweep's own choice.
+    #: Coverage cannot collapse, because the Weyl sequence is never interrupted
+    #: -- the largest revisit gap grows by at most this many actions instead of
+    #: becoming unbounded, which is what every score-blending variant did.
+    #: 0 reduces the policy exactly to ``coprime_sweep``.
+    refine_radius: int = 2
 
     sequential_sweep: SequentialSweepConfig = SequentialSweepConfig()
     random_scan: RandomScanConfig = RandomScanConfig()

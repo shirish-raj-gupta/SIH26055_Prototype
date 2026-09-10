@@ -401,6 +401,13 @@ class PhaseLockedScheduler(Scheduler):
 
         if fallback is not None:
             self.fallback = fallback
+        elif cfg.fallback == "coprime_sweep":
+            # Defined below in this module. Between arrivals the receiver should
+            # be doing the best coverage available, and on HARD that is the
+            # golden-ratio sweep, not a bandit: 33 never-intercepted against
+            # whittle's 50 over 8 seeds. Parking on arrivals is a correction to
+            # the fallback, so it inherits whatever the fallback gets wrong.
+            self.fallback = CoprimeSweepScheduler(config, seed)
         elif cfg.fallback == "whittle":
             from smartscan.agents.whittle import WhittleIndexScheduler
 
