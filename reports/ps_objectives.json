@@ -1,0 +1,786 @@
+{
+ "tiers": {
+  "easy": {
+   "tier": "easy",
+   "baseline": "sequential",
+   "n_seeds": 30,
+   "agents": {
+    "random": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.08724832214765088,
+      "lo": -0.4596774193548387,
+      "hi": 0.24832711171121086,
+      "p_raw": 0.7812524362910208,
+      "p_holm": 0.7812524362910208,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7466485260320528,
+      "lo": -0.8555025918472565,
+      "hi": -0.6967422963052191,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "priority_rr": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.5302013422818792,
+      "lo": 0.42679286494357516,
+      "hi": 0.6114369747899158,
+      "p_raw": 0.0003582387257474693,
+      "p_holm": 0.004298864708969632,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.2914672164727747,
+      "lo": 0.2412168242082089,
+      "hi": 0.3283883811210968,
+      "p_raw": 3.725290298461914e-09,
+      "p_holm": 6.332993507385254e-08,
+      "significant": true
+     },
+     "qualifies": true,
+     "acceptable": true
+    },
+    "epsilon_greedy": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.16778523489932898,
+      "lo": -0.04838709677419359,
+      "hi": 0.33908045977011503,
+      "p_raw": 0.04040080526326529,
+      "p_holm": 0.16160322105306116,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.7317822077634004,
+      "lo": 0.6970800616587766,
+      "hi": 0.7656041009713832,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "ucb1": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.36912751677852357,
+      "lo": 0.19354838709677413,
+      "hi": 0.5844358766233763,
+      "p_raw": 0.0004528825689380197,
+      "p_holm": 0.004610184887547131,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.18901565393584568,
+      "lo": 0.13152459294455202,
+      "hi": 0.22917845406202192,
+      "p_raw": 5.587935447692871e-09,
+      "p_holm": 8.381903171539307e-08,
+      "significant": true
+     },
+     "qualifies": true,
+     "acceptable": true
+    },
+    "thompson": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.18791946308724847,
+      "lo": -0.05970149253731348,
+      "hi": 0.37647058823529406,
+      "p_raw": 0.08361985367162957,
+      "p_holm": 0.16723970734325913,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.6439611504723068,
+      "lo": 0.6020618466335413,
+      "hi": 0.6626944615431253,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "whittle": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.36912751677852357,
+      "lo": 0.19354838709677413,
+      "hi": 0.5844358766233763,
+      "p_raw": 0.0004191077170497392,
+      "p_holm": 0.004610184887547131,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.11847462201174144,
+      "lo": 0.052513253751130806,
+      "hi": 0.17144124849857975,
+      "p_raw": 5.973502993583679e-06,
+      "p_holm": 8.362904191017151e-05,
+      "significant": true
+     },
+     "qualifies": true,
+     "acceptable": true
+    },
+    "coprime_sweep": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.22818791946308734,
+      "lo": 0.04268292682926833,
+      "hi": 0.37280061892130834,
+      "p_raw": 0.027012967569357362,
+      "p_holm": 0.1350648378467868,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7586629154750882,
+      "lo": -0.8614990173109212,
+      "hi": -0.7295168680653389,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "phase_locked": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.36912751677852357,
+      "lo": 0.19354838709677413,
+      "hi": 0.5844358766233763,
+      "p_raw": 0.0004191077170497392,
+      "p_holm": 0.004610184887547131,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.11847462201174144,
+      "lo": 0.052513253751130806,
+      "hi": 0.17144124849857975,
+      "p_raw": 5.973502993583679e-06,
+      "p_holm": 8.362904191017151e-05,
+      "significant": true
+     },
+     "qualifies": true,
+     "acceptable": true
+    },
+    "predictor": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.36912751677852357,
+      "lo": 0.09701492537313441,
+      "hi": 0.514792899408284,
+      "p_raw": 0.0025546738382541847,
+      "p_holm": 0.020437390706033478,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.8762004657732263,
+      "lo": 0.8625096395128616,
+      "hi": 0.9110885394334661,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": true,
+     "acceptable": true
+    },
+    "dqn": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.11409395973154353,
+      "lo": -0.5671641791044777,
+      "hi": 0.05142857142857132,
+      "p_raw": 0.04491323981508846,
+      "p_holm": 0.16160322105306116,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7390470653088632,
+      "lo": -0.8666188350938072,
+      "hi": -0.6483722855395528,
+      "p_raw": 0.0061949919909238815,
+      "p_holm": 0.04336494393646717,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "ppo": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.36912751677852357,
+      "lo": 0.07462686567164185,
+      "hi": 0.5503355704697986,
+      "p_raw": 0.008726115338173945,
+      "p_holm": 0.05235669202904367,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.9083289635071481,
+      "lo": 0.8834624824427082,
+      "hi": 0.9166409992070681,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "hybrid": {
+     "intercept time": {
+      "n": 29,
+      "improvement": -81.72222222222221,
+      "lo": -96.63157894736842,
+      "hi": -61.62500000000001,
+      "p_raw": 3.725290298461914e-09,
+      "p_holm": 6.332993507385254e-08,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -6.365947111245738,
+      "lo": -8.303233508947695,
+      "hi": -4.720577263342025,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    }
+   }
+  },
+  "medium": {
+   "tier": "medium",
+   "baseline": "sequential",
+   "n_seeds": 30,
+   "agents": {
+    "random": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.3144104803493449,
+      "lo": -0.6294642857142856,
+      "hi": 0.05982905982905988,
+      "p_raw": 0.013972035376038172,
+      "p_holm": 0.1536923891364199,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7545637037818625,
+      "lo": -1.0000181595031288,
+      "hi": -0.4815094465432125,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "priority_rr": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.21834061135371186,
+      "lo": 0.027882300126516515,
+      "hi": 0.4789915966386555,
+      "p_raw": 0.16501539274317845,
+      "p_holm": 0.3300307854863569,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.07046084822659592,
+      "lo": -0.24933858208929718,
+      "hi": 0.04536976424998937,
+      "p_raw": 0.02084985189139843,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "epsilon_greedy": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.1004366812227074,
+      "lo": -0.6923076923076923,
+      "hi": 0.04464285714285706,
+      "p_raw": 0.02123180861513454,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.7530725781888953,
+      "lo": 0.6780216351419693,
+      "hi": 0.8229176751603082,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "ucb1": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.3275109170305677,
+      "lo": 0.18803418803418806,
+      "hi": 0.3962076271186433,
+      "p_raw": 0.058472237838346305,
+      "p_holm": 0.2090533897280693,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.09366276448085209,
+      "lo": -0.24140404669016122,
+      "hi": 0.02647413078477975,
+      "p_raw": 0.052263347432017326,
+      "p_holm": 0.2090533897280693,
+      "significant": false
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "thompson": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.18340611353711794,
+      "lo": -0.33333333333333326,
+      "hi": 0.29962479440789425,
+      "p_raw": 0.8936304071827303,
+      "p_holm": 0.8936304071827303,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.4913245374201678,
+      "lo": 0.2681627482155063,
+      "hi": 0.7047323213244497,
+      "p_raw": 1.6391277313232422e-07,
+      "p_holm": 3.4421682357788086e-06,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "whittle": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.27510917030567683,
+      "lo": 0.18803418803418806,
+      "hi": 0.34901960784313724,
+      "p_raw": 0.021894491648308975,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.4023668272145551,
+      "lo": 0.2698721299314998,
+      "hi": 0.5589495611484032,
+      "p_raw": 8.326023817062378e-07,
+      "p_holm": 1.6652047634124756e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "coprime_sweep": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.24017467248908306,
+      "lo": -0.030623165580928615,
+      "hi": 0.35470085470085466,
+      "p_raw": 0.037734056863248426,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.6317253999749547,
+      "lo": -0.8451997899493926,
+      "hi": -0.4971661140631385,
+      "p_raw": 2.7623027563095093e-06,
+      "p_holm": 4.972144961357117e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "phase_locked": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.27510917030567683,
+      "lo": 0.18803418803418806,
+      "hi": 0.34901960784313724,
+      "p_raw": 0.021894491648308975,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.43358483538936765,
+      "lo": 0.2745243761232839,
+      "hi": 0.591029701748808,
+      "p_raw": 1.6838312149047852e-06,
+      "p_holm": 3.199279308319092e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "predictor": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -4.82532751091703,
+      "lo": -7.538461538461538,
+      "hi": 0.18803418803418806,
+      "p_raw": 0.0023674946278333664,
+      "p_holm": 0.028409935534000397,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.6613907558714883,
+      "lo": 0.5924257097117772,
+      "hi": 0.8003148832149615,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 4.470348358154297e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "dqn": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.685589519650655,
+      "lo": -1.1160714285714284,
+      "hi": -0.3984110603165942,
+      "p_raw": 2.369271077058425e-05,
+      "p_holm": 0.00035539066155876374,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.4227143862565528,
+      "lo": 0.25502387907352647,
+      "hi": 0.5923501925462298,
+      "p_raw": 2.7623027563095093e-06,
+      "p_holm": 4.972144961357117e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "ppo": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.982532751091703,
+      "lo": -2.5807860262008737,
+      "hi": -0.23067685589519793,
+      "p_raw": 6.286613643169403e-05,
+      "p_holm": 0.0008801259100437164,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.702306072492597,
+      "lo": -1.2264097536744554,
+      "hi": -0.42615685501004896,
+      "p_raw": 7.056817412376404e-05,
+      "p_holm": 0.0009173862636089325,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "hybrid": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.23144104803493457,
+      "lo": -0.8794642857142858,
+      "hi": 0.17094017094017097,
+      "p_raw": 0.03326423839289795,
+      "p_holm": 0.2084985189139843,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.5519417058845947,
+      "lo": 0.31928431357296805,
+      "hi": 0.6892382656461963,
+      "p_raw": 5.973502993583679e-06,
+      "p_holm": 9.557604789733887e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    }
+   }
+  },
+  "hard": {
+   "tier": "hard",
+   "baseline": "sequential",
+   "n_seeds": 30,
+   "agents": {
+    "random": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.217948717948718,
+      "lo": -0.5046728971962617,
+      "hi": -0.06837606837606831,
+      "p_raw": 0.00037309693751175443,
+      "p_holm": 0.0037309693751175444,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7594223270474667,
+      "lo": -0.9828240055459159,
+      "hi": -0.5927072675331817,
+      "p_raw": 9.98377799987793e-07,
+      "p_holm": 1.3977289199829102e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "priority_rr": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.5726495726495725,
+      "lo": -1.0412844036697249,
+      "hi": -0.17094017094017097,
+      "p_raw": 4.8580240703559236e-05,
+      "p_holm": 0.0005343826477391516,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7198548502008504,
+      "lo": -0.8845465718466526,
+      "hi": -0.5193972325062522,
+      "p_raw": 1.1920928955078125e-06,
+      "p_holm": 1.5497207641601562e-05,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "ucb1": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.17521367521367523,
+      "lo": 0.01851427115188576,
+      "hi": 0.3145161290322581,
+      "p_raw": 0.13860690554385485,
+      "p_holm": 0.33626191318035126,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.5064417490311282,
+      "lo": -0.6224180218319095,
+      "hi": -0.4018261909144201,
+      "p_raw": 2.60770320892334e-08,
+      "p_holm": 4.4330954551696777e-07,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "thompson": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -2.7393162393162394,
+      "lo": -9.03688524590164,
+      "hi": -0.8508771929824562,
+      "p_raw": 1.0276989843329648e-05,
+      "p_holm": 0.00012332387811995576,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.3281591720651215,
+      "lo": -0.23474116754207025,
+      "hi": 0.5152409676817726,
+      "p_raw": 0.049710121005773544,
+      "p_holm": 0.24855060502886772,
+      "significant": false
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "whittle": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.02991452991452994,
+      "lo": -0.5299145299145298,
+      "hi": 0.20512820512820518,
+      "p_raw": 0.08406547829508781,
+      "p_holm": 0.33626191318035126,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.4875221898698394,
+      "lo": 0.40923990959514306,
+      "hi": 0.5850276368113316,
+      "p_raw": 2.60770320892334e-08,
+      "p_holm": 4.4330954551696777e-07,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "coprime_sweep": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.23504273504273512,
+      "lo": 0.03278688524590167,
+      "hi": 0.3122529644268774,
+      "p_raw": 0.023023654017257797,
+      "p_holm": 0.16116557812080456,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": -0.7233946807038465,
+      "lo": -0.8649206011046392,
+      "hi": -0.5548883768490963,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 3.91155481338501e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "phase_locked": {
+     "intercept time": {
+      "n": 30,
+      "improvement": 0.02991452991452994,
+      "lo": -0.5299145299145298,
+      "hi": 0.20967741935483866,
+      "p_raw": 0.08970935353872352,
+      "p_holm": 0.33626191318035126,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.5154767873822984,
+      "lo": 0.4320356395901474,
+      "hi": 0.6032723364476889,
+      "p_raw": 1.30385160446167e-08,
+      "p_holm": 2.3469328880310059e-07,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": true
+    },
+    "predictor": {
+     "intercept time": {
+      "n": 24,
+      "improvement": -13.978632478632477,
+      "lo": -29.046296296296298,
+      "hi": -10.019378423826371,
+      "p_raw": 2.384185791015625e-07,
+      "p_holm": 3.5762786865234375e-06,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.7109562415912578,
+      "lo": 0.6408170122442272,
+      "hi": 0.7500626588152052,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 3.91155481338501e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "dqn": {
+     "intercept time": {
+      "n": 30,
+      "improvement": -0.44017094017094016,
+      "lo": -0.9330431547619046,
+      "hi": -0.08870967741935491,
+      "p_raw": 0.0010353628465334457,
+      "p_holm": 0.009318265618801011,
+      "significant": true
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.5459440806246442,
+      "lo": 0.4972024616061994,
+      "hi": 0.5971117247464817,
+      "p_raw": 1.862645149230957e-09,
+      "p_holm": 3.91155481338501e-08,
+      "significant": true
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "ppo": {
+     "intercept time": {
+      "n": 7,
+      "improvement": -41.81981981981982,
+      "lo": -66.67045454545455,
+      "hi": -0.6721311475409838,
+      "p_raw": 0.015625,
+      "p_holm": 0.125,
+      "significant": false
+     },
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.1753799389782403,
+      "lo": -0.4520301087335211,
+      "hi": 0.2716717619734832,
+      "p_raw": 0.42795460671186447,
+      "p_holm": 0.42795460671186447,
+      "significant": false
+     },
+     "qualifies": false,
+     "acceptable": false
+    },
+    "hybrid": {
+     "interception rate": {
+      "n": 30,
+      "improvement": 0.4680250579381424,
+      "lo": -2.852987528472931,
+      "hi": 0.5937578936858464,
+      "p_raw": 0.036434996873140335,
+      "p_holm": 0.218609981238842,
+      "significant": false
+     },
+     "qualifies": false,
+     "acceptable": false
+    }
+   }
+  }
+ }
+}

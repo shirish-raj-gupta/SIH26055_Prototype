@@ -72,6 +72,8 @@ reports/*
 !reports/hard_tier_ceiling.json
 !reports/hard_tier_ceiling.md
 !reports/hard_retrain_eval.json
+!reports/ps_objectives.json
+!reports/ps_objectives.md
 !reports/staleness_value.json
 !reports/staleness_value.md
 # 567 MB of replayed dwells; regenerate with `make dataset`.
