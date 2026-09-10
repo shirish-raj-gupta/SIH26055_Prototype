@@ -19,48 +19,59 @@ be found in it.
 
 ## `easy`
 
-| scheduler | never intercepted | TWIR | ttfi (s) | coverage |
+| scheduler | never intercepted | per-seed (med, min-max) | TWIR | ttfi (s) |
 |---|---|---|---|---|
-| **`epsilon_greedy`** | 0 | 0.06548 | 0.0620 | 1.000 |
-| **`predictor`** | 5 | 0.14187 | 0.0470 | 1.000 |
-| **`ppo`** | 8 | 0.19160 | 0.0470 | 1.000 |
+| **`epsilon_greedy`** | 0 | 0.0, 0-0 | 0.06548 | 0.0620 |
+| **`predictor`** | 5 | 0.0, 0-2 | 0.14187 | 0.0470 |
+| **`ppo`** | 8 | 0.0, 0-2 | 0.19160 | 0.0470 |
 
 _Pareto-optimal over (never-intercepted, TWIR) from 13 schedulers, 30 seeds. Everything else is beaten on both axes._
 
-- **Find everything once** → `epsilon_greedy` (0 never intercepted)
+- **Find everything once** → `epsilon_greedy` (0 never intercepted, TWIR 0.06548)
+  - equivalent on coverage within ±0.5 emitters/seed (95% CI): `sequential` (0, TWIR 0.01756), `random` (0, TWIR 0.01006), `priority_rr` (0, TWIR 0.02479), `ucb1` (0, TWIR 0.02166), `thompson` (0, TWIR 0.04933), `whittle` (0, TWIR 0.01992), `coprime_sweep` (0, TWIR 0.00999), `phase_locked` (0, TWIR 0.01992), `dqn` (0, TWIR 0.01010). Chosen on TWIR.
+  - _inconclusive_ (neither separable nor equivalent at 30 seeds): `predictor` (5). More seeds would be needed to rank these.
 - **Collect the most from what is found** → `ppo` (TWIR 0.19160, 8 never intercepted)
+- _vs the runner-up on coverage (`epsilon_greedy` vs `sequential`), paired over 30 seeds:_ **+0.00 emitters/seed** never-intercepted (95% CI [+0.00, +0.00]); totals 0 vs 0, Wilcoxon p=nan — **NOT significant**
+- _coverage pick vs TWIR pick (`epsilon_greedy` vs `ppo`), paired over 30 seeds:_ **+0.00 emitters/seed** never-intercepted (95% CI [+0.00, +0.00]); totals 0 vs 8, Wilcoxon p=0.0114 — **significant**
 - The price of the swap: **+8 emitters never intercepted** for **2.9x the TWIR**.
 
 ## `medium`
 
-| scheduler | never intercepted | TWIR | ttfi (s) | coverage |
+| scheduler | never intercepted | per-seed (med, min-max) | TWIR | ttfi (s) |
 |---|---|---|---|---|
-| **`coprime_sweep`** | 61 | 0.00796 | 0.0870 | 0.867 |
-| **`priority_rr`** | 62 | 0.01213 | 0.0895 | 0.867 |
-| **`whittle`** | 70 | 0.02173 | 0.0830 | 0.857 |
-| **`phase_locked`** | 72 | 0.02293 | 0.0830 | 0.857 |
-| **`hybrid`** | 102 | 0.02898 | 0.1410 | 0.793 |
-| **`epsilon_greedy`** | 131 | 0.05259 | 0.1260 | 0.724 |
+| **`coprime_sweep`** | 61 | 2.0, 0-5 | 0.00796 | 0.0870 |
+| **`priority_rr`** | 62 | 2.0, 0-4 | 0.01213 | 0.0895 |
+| **`whittle`** | 70 | 2.0, 0-5 | 0.02173 | 0.0830 |
+| **`phase_locked`** | 72 | 2.0, 0-5 | 0.02293 | 0.0830 |
+| **`hybrid`** | 102 | 3.0, 2-5 | 0.02898 | 0.1410 |
+| **`epsilon_greedy`** | 131 | 4.0, 2-7 | 0.05259 | 0.1260 |
 
 _Pareto-optimal over (never-intercepted, TWIR) from 13 schedulers, 30 seeds. Everything else is beaten on both axes._
 
-- **Find everything once** → `coprime_sweep` (61 never intercepted)
+- **Find everything once** → `priority_rr` (62 never intercepted, TWIR 0.01213)
+  - equivalent on coverage within ±0.5 emitters/seed (95% CI): `coprime_sweep` (61, TWIR 0.00796). Chosen on TWIR.
+  - _inconclusive_ (neither separable nor equivalent at 30 seeds): `ucb1` (70), `whittle` (70), `phase_locked` (72), `sequential` (73), `random` (76). More seeds would be needed to rank these.
 - **Collect the most from what is found** → `epsilon_greedy` (TWIR 0.05259, 131 never intercepted)
-- The price of the swap: **+70 emitters never intercepted** for **6.6x the TWIR**.
+- _vs the runner-up on coverage (`priority_rr` vs `coprime_sweep`), paired over 30 seeds:_ **+0.00 emitters/seed** never-intercepted (95% CI [-0.50, +0.50]); totals 62 vs 61, Wilcoxon p=0.924 — **NOT significant**
+- _coverage pick vs TWIR pick (`priority_rr` vs `epsilon_greedy`), paired over 30 seeds:_ **+2.00 emitters/seed** never-intercepted (95% CI [+1.50, +3.00], +50.0% relative); totals 62 vs 131, Wilcoxon p=4.64e-06 — **significant**
+- The price of the swap: **+69 emitters never intercepted** for **4.3x the TWIR**.
 
 ## `hard`
 
-| scheduler | never intercepted | TWIR | ttfi (s) | coverage |
+| scheduler | never intercepted | per-seed (med, min-max) | TWIR | ttfi (s) |
 |---|---|---|---|---|
-| **`sequential`** | 138 | 0.01282 | 0.1170 | 0.854 |
-| **`phase_locked`** | 177 | 0.02646 | 0.1135 | 0.800 |
-| **`dqn`** | 181 | 0.02824 | 0.1685 | 0.793 |
-| **`predictor`** | 375 | 0.04436 | 1.7525 | 0.576 |
+| **`sequential`** | 138 | 4.0, 2-8 | 0.01282 | 0.1170 |
+| **`phase_locked`** | 177 | 6.0, 2-10 | 0.02646 | 0.1135 |
+| **`dqn`** | 181 | 6.0, 2-11 | 0.02824 | 0.1685 |
+| **`predictor`** | 375 | 12.0, 5-18 | 0.04436 | 1.7525 |
 
 _Pareto-optimal over (never-intercepted, TWIR) from 12 schedulers, 30 seeds. Everything else is beaten on both axes._
 
-- **Find everything once** → `sequential` (138 never intercepted)
+- **Find everything once** → `sequential` (138 never intercepted, TWIR 0.01282)
+  - _inconclusive_ (neither separable nor equivalent at 30 seeds): `coprime_sweep` (139). More seeds would be needed to rank these.
 - **Collect the most from what is found** → `predictor` (TWIR 0.04436, 375 never intercepted)
+- _vs the runner-up on coverage (`sequential` vs `coprime_sweep`), paired over 30 seeds:_ **+0.00 emitters/seed** never-intercepted (95% CI [-1.00, +1.50], +0.0% relative); totals 138 vs 139, Wilcoxon p=0.977 — **NOT significant**
+- _coverage pick vs TWIR pick (`sequential` vs `predictor`), paired over 30 seeds:_ **+8.00 emitters/seed** never-intercepted (95% CI [+7.00, +9.00], +66.7% relative); totals 138 vs 375, Wilcoxon p=1.64e-06 — **significant**
 - The price of the swap: **+237 emitters never intercepted** for **3.5x the TWIR**.
 
 ## Reading this as one strategy
