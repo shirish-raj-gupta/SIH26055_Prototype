@@ -74,6 +74,8 @@ reports/*
 !reports/hard_retrain_eval.json
 !reports/ps_objectives.json
 !reports/ps_objectives.md
+!reports/predictor_sweep_ps.json
+!reports/predictor_sweep_ps.md
 !reports/phase_locked_modes.json
 !reports/phase_locked_modes.md
 !reports/staleness_value.json
